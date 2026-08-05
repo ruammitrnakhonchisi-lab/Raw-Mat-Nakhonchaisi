@@ -1,0 +1,771 @@
+<script>
+/* ==========================================================
+   Stock Pro — Client-side SPA logic
+   ========================================================== */
+
+var STATE = {
+  token: sessionStorage.getItem('stockpro_token') || null,
+  user: JSON.parse(sessionStorage.getItem('stockpro_user') || 'null'),
+  page: 'dashboard',
+  itemsCache: null,
+  categoriesCache: null
+};
+
+/* ---------- Promisified google.script.run ---------- */
+function api(fn) {
+  var args = Array.prototype.slice.call(arguments, 1);
+  return new Promise(function (resolve, reject) {
+    google.script.run
+      .withSuccessHandler(resolve)
+      .withFailureHandler(function (err) { reject(err); })
+      [fn].apply(null, args);
+  });
+}
+
+function toast(message, type) {
+  var el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.textContent = message;
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(function () { el.remove(); }, 3500);
+}
+
+function fmtNum(n) {
+  n = Number(n) || 0;
+  return n.toLocaleString('th-TH', { maximumFractionDigits: 2 });
+}
+function fmtMoney(n) {
+  return '฿' + fmtNum(n);
+}
+function esc(s) {
+  var d = document.createElement('div');
+  d.textContent = s === undefined || s === null ? '' : s;
+  return d.innerHTML;
+}
+
+/* ---------- Boot ---------- */
+window.addEventListener('DOMContentLoaded', function () {
+  document.getElementById('loginForm').addEventListener('submit', onLogin);
+  document.getElementById('logoutBtn').addEventListener('click', onLogout);
+  document.getElementById('hamburgerBtn').addEventListener('click', function () {
+    document.getElementById('sidebar').classList.add('open');
+  });
+  document.getElementById('sidebarClose').addEventListener('click', function () {
+    document.getElementById('sidebar').classList.remove('open');
+  });
+  document.querySelectorAll('.nav-item').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      navigate(a.dataset.page);
+      document.getElementById('sidebar').classList.remove('open');
+    });
+  });
+  tickClock();
+  setInterval(tickClock, 1000 * 30);
+
+  if (STATE.token) {
+    api('whoAmI', STATE.token).then(function (res) {
+      if (res.ok) { showApp(); } else { showLogin(); }
+    }).catch(showLogin);
+  } else {
+    showLogin();
+  }
+});
+
+function tickClock() {
+  var el = document.getElementById('clock');
+  if (el) el.textContent = new Date().toLocaleString('th-TH', { dateStyle: 'full', timeStyle: 'short' });
+}
+
+function onLogin(e) {
+  e.preventDefault();
+  var btn = document.getElementById('loginBtn');
+  var username = document.getElementById('loginUsername').value.trim();
+  var password = document.getElementById('loginPassword').value;
+  var errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'กำลังเข้าสู่ระบบ...';
+
+  api('login', username, password).then(function (res) {
+    btn.disabled = false;
+    btn.textContent = 'เข้าสู่ระบบ';
+    if (!res.ok) {
+      errEl.textContent = res.message;
+      errEl.style.display = 'block';
+      return;
+    }
+    STATE.token = res.token;
+    STATE.user = { username: res.username, name: res.name, role: res.role };
+    sessionStorage.setItem('stockpro_token', res.token);
+    sessionStorage.setItem('stockpro_user', JSON.stringify(STATE.user));
+    showApp();
+  }).catch(function (err) {
+    btn.disabled = false;
+    btn.textContent = 'เข้าสู่ระบบ';
+    errEl.textContent = 'เกิดข้อผิดพลาด: ' + (err.message || err);
+    errEl.style.display = 'block';
+  });
+}
+
+function onLogout() {
+  if (STATE.token) api('logout', STATE.token).catch(function(){});
+  sessionStorage.removeItem('stockpro_token');
+  sessionStorage.removeItem('stockpro_user');
+  STATE.token = null;
+  STATE.user = null;
+  showLogin();
+}
+
+function showLogin() {
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('appShell').style.display = 'none';
+}
+
+function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = 'flex';
+  document.getElementById('userName').textContent = STATE.user.name || STATE.user.username;
+  document.getElementById('userRole').textContent = STATE.user.role === 'admin' ? 'ผู้ดูแลระบบ' : 'พนักงาน';
+  document.getElementById('userAvatar').textContent = (STATE.user.name || STATE.user.username).charAt(0).toUpperCase();
+  if (STATE.user.role !== 'admin') {
+    document.getElementById('navUsers').style.display = 'none';
+  }
+  navigate('dashboard');
+}
+
+/* ---------- Router ---------- */
+var PAGE_TITLES = {
+  dashboard: 'แดชบอร์ด', items: 'ข้อมูลวัตถุดิบ', stockin: 'รับเข้าวัตถุดิบ',
+  stockout: 'เบิกวัตถุดิบ', adjust: 'ปรับสต๊อค', ledger: 'ประวัติการเคลื่อนไหว',
+  alerts: 'แจ้งเตือน', reports: 'รายงาน', users: 'จัดการผู้ใช้งาน', settings: 'ตั้งค่าระบบ'
+};
+
+function navigate(page) {
+  STATE.page = page;
+  document.querySelectorAll('.nav-item').forEach(function (a) {
+    a.classList.toggle('active', a.dataset.page === page);
+  });
+  document.getElementById('pageTitle').textContent = PAGE_TITLES[page] || '';
+  var content = document.getElementById('content');
+  content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
+
+  var renderers = {
+    dashboard: renderDashboard, items: renderItems, stockin: renderStockIn,
+    stockout: renderStockOut, adjust: renderAdjust, ledger: renderLedger,
+    alerts: renderAlerts, reports: renderReports, users: renderUsers, settings: renderSettings
+  };
+  (renderers[page] || renderDashboard)(content);
+}
+
+/* ---------- Modal helper ---------- */
+function openModal(title, bodyHtml, onMount) {
+  var root = document.getElementById('modalRoot');
+  root.innerHTML =
+    '<div class="modal-overlay" id="modalOverlay"><div class="modal-box">' +
+    '<button class="modal-close" id="modalCloseBtn">✕</button>' +
+    '<h3>' + esc(title) + '</h3><div id="modalBody">' + bodyHtml + '</div></div></div>';
+  document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+  document.getElementById('modalOverlay').addEventListener('click', function (e) {
+    if (e.target.id === 'modalOverlay') closeModal();
+  });
+  if (onMount) onMount(document.getElementById('modalBody'));
+}
+function closeModal() { document.getElementById('modalRoot').innerHTML = ''; }
+
+/* ==========================================================
+   DASHBOARD
+   ========================================================== */
+function renderDashboard(content) {
+  api('getDashboardData', STATE.token).then(function (d) {
+    if (!d) {
+      content.innerHTML =
+        '<div class="alert alert-error">โหลดข้อมูลแดชบอร์ดไม่สำเร็จ (เซิร์ฟเวอร์ไม่ส่งข้อมูลกลับมา) ' +
+        'อาจเกิดจากเซสชันหมดอายุ หรือข้อมูลมีปริมาณมากเกินไป กรุณาลองใหม่ ' +
+        '<button class="btn btn-ghost btn-sm" onclick="renderDashboard(document.getElementById(\'content\'))">ลองอีกครั้ง</button>' +
+        ' หรือ <button class="btn btn-ghost btn-sm" onclick="onLogout()">เข้าสู่ระบบใหม่</button></div>';
+      return;
+    }
+
+    var lowList = d.lowStockList || [];
+    var expList = d.expiringList || [];
+    var recentList = d.recentLedger || [];
+    var chart = d.chart7d || [];
+
+    var lowRows = lowList.map(function (it) {
+      return '<tr><td>' + esc(it.SKU) + '</td><td>' + esc(it['ชื่อวัตถุดิบ']) + '</td>' +
+        '<td>' + fmtNum(it['จำนวนคงเหลือ']) + ' ' + esc(it['หน่วยนับ']) + '</td>' +
+        '<td><span class="badge badge-danger">ต่ำกว่าขั้นต่ำ</span></td></tr>';
+    }).join('') || '<tr><td colspan="4" class="empty-state">ไม่มีรายการต่ำกว่าจุดสั่งซื้อ 🎉</td></tr>';
+
+    var expRows = expList.map(function (r) {
+      return '<tr><td>' + esc(r.SKU) + '</td><td>' + esc(r['ชื่อวัตถุดิบ']) + '</td>' +
+        '<td>' + esc(r['Lot/Batch']) + '</td><td>' + esc(r['วันหมดอายุ']) + '</td></tr>';
+    }).join('') || '<tr><td colspan="4" class="empty-state">ไม่มีล็อตใกล้หมดอายุ 🎉</td></tr>';
+
+    var recentRows = recentList.map(function (r) {
+      var badge = r['ประเภท'] === 'IN' ? 'badge-success' : (r['ประเภท'] === 'OUT' ? 'badge-danger' : 'badge-warn');
+      var label = r['ประเภท'] === 'IN' ? 'รับเข้า' : (r['ประเภท'] === 'OUT' ? 'เบิกออก' : 'ปรับสต๊อค');
+      return '<tr><td>' + esc(r['วันที่เวลา']) + '</td><td><span class="badge ' + badge + '">' + label + '</span></td>' +
+        '<td>' + esc(r['ชื่อวัตถุดิบ']) + '</td><td>' + fmtNum(r['จำนวนเปลี่ยนแปลง']) + '</td><td>' + esc(r['ผู้บันทึก']) + '</td></tr>';
+    }).join('') || '<tr><td colspan="5" class="empty-state">ยังไม่มีรายการ</td></tr>';
+
+    var maxVal = Math.max.apply(null, chart.map(function (r) { return Math.max(r.in, r.out); }).concat([1]));
+    var chartBars = chart.map(function (r) {
+      var inH = Math.round((r.in / maxVal) * 100);
+      var outH = Math.round((r.out / maxVal) * 100);
+      var day = new Date(r.date).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit' });
+      return '<div class="bar-col"><div class="bar-pair">' +
+        '<div class="bar in" style="height:' + Math.max(inH, 2) + '%" title="รับเข้า ' + fmtNum(r.in) + '"></div>' +
+        '<div class="bar out" style="height:' + Math.max(outH, 2) + '%" title="เบิกออก ' + fmtNum(r.out) + '"></div>' +
+        '</div><div class="lbl">' + day + '</div></div>';
+    }).join('');
+
+    content.innerHTML =
+      '<div class="grid grid-4">' +
+      statCard('📦', 'รายการวัตถุดิบทั้งหมด', d.totalItems, '') +
+      statCard('⚠️', 'ต่ำกว่าจุดสั่งซื้อ', d.lowStockCount, 'danger') +
+      statCard('⏰', 'ใกล้หมดอายุ', d.expiringCount, 'warn') +
+      statCard('💰', 'มูลค่าสต๊อครวม', fmtMoney(d.totalValue), 'success') +
+      '</div>' +
+
+      '<div class="grid grid-2" style="margin-top:16px;">' +
+        '<div class="card"><h3>การเคลื่อนไหว 7 วันล่าสุด</h3>' +
+          '<div style="display:flex;gap:14px;font-size:12px;margin-bottom:4px;">' +
+          '<span><span style="display:inline-block;width:10px;height:10px;background:#1e8e5a;border-radius:2px;"></span> รับเข้า</span>' +
+          '<span><span style="display:inline-block;width:10px;height:10px;background:#d93025;border-radius:2px;"></span> เบิกออก</span></div>' +
+          '<div class="bar-chart">' + chartBars + '</div></div>' +
+        '<div class="card"><h3>รายการล่าสุด</h3>' +
+          '<div class="table-wrap" style="border:none;"><table><thead><tr><th>เวลา</th><th>ประเภท</th><th>วัตถุดิบ</th><th>จำนวน</th><th>ผู้บันทึก</th></tr></thead>' +
+          '<tbody>' + recentRows + '</tbody></table></div></div>' +
+      '</div>' +
+
+      '<div class="section-title"><h3>⚠️ วัตถุดิบต่ำกว่าจุดสั่งซื้อ</h3><a href="#" onclick="navigate(\'items\');return false;" class="small">ดูทั้งหมด →</a></div>' +
+      '<div class="table-wrap"><table><thead><tr><th>SKU</th><th>ชื่อวัตถุดิบ</th><th>คงเหลือ</th><th>สถานะ</th></tr></thead><tbody>' + lowRows + '</tbody></table></div>' +
+
+      '<div class="section-title"><h3>⏰ ล็อตใกล้หมดอายุ</h3><a href="#" onclick="navigate(\'alerts\');return false;" class="small">ดูทั้งหมด →</a></div>' +
+      '<div class="table-wrap"><table><thead><tr><th>SKU</th><th>ชื่อวัตถุดิบ</th><th>Lot</th><th>วันหมดอายุ</th></tr></thead><tbody>' + expRows + '</tbody></table></div>';
+  }).catch(showErr(content));
+}
+
+function statCard(icon, label, value, tone) {
+  return '<div class="card stat-card ' + (tone || '') + '"><div class="icon">' + icon + '</div>' +
+    '<div class="label">' + label + '</div><div class="value">' + value + '</div></div>';
+}
+
+function showErr(content) {
+  return function (err) {
+    content.innerHTML = '<div class="alert alert-error">เกิดข้อผิดพลาด: ' + esc(err.message || err) + '</div>';
+  };
+}
+
+/* ==========================================================
+   ITEMS (ข้อมูลวัตถุดิบ)
+   ========================================================== */
+function renderItems(content) {
+  Promise.all([api('getItems', STATE.token), api('getCategories', STATE.token)]).then(function (res) {
+    STATE.itemsCache = res[0];
+    STATE.categoriesCache = res[1];
+    drawItemsTable(content, '');
+  }).catch(showErr(content));
+}
+
+function drawItemsTable(content, filterText) {
+  var items = STATE.itemsCache || [];
+  var filtered = items.filter(function (it) {
+    var q = filterText.toLowerCase();
+    return !q || (it.SKU + it['ชื่อวัตถุดิบ'] + it['หมวดหมู่']).toLowerCase().indexOf(q) > -1;
+  });
+
+  var rows = filtered.map(function (it) {
+    var qty = Number(it['จำนวนคงเหลือ']);
+    var min = Number(it['จุดสั่งซื้อขั้นต่ำ']);
+    var status = qty <= min
+      ? '<span class="badge badge-danger">ต่ำกว่าขั้นต่ำ</span>'
+      : (qty >= Number(it['สต๊อคสูงสุด']) && Number(it['สต๊อคสูงสุด']) > 0
+        ? '<span class="badge badge-warn">เกินสูงสุด</span>'
+        : '<span class="badge badge-success">ปกติ</span>');
+    return '<tr>' +
+      '<td>' + esc(it.SKU) + '</td>' +
+      '<td>' + esc(it['ชื่อวัตถุดิบ']) + '</td>' +
+      '<td>' + esc(it['หมวดหมู่']) + '</td>' +
+      '<td>' + fmtNum(qty) + ' ' + esc(it['หน่วยนับ']) + '</td>' +
+      '<td>' + fmtNum(min) + '</td>' +
+      '<td>' + fmtMoney(it['ราคาต่อหน่วย']) + '</td>' +
+      '<td>' + esc(it['ที่จัดเก็บ']) + '</td>' +
+      '<td>' + status + '</td>' +
+      '<td><button class="btn btn-ghost btn-sm" onclick="editItem(\'' + it.ID + '\')">แก้ไข</button></td>' +
+      '</tr>';
+  }).join('') || '<tr><td colspan="9" class="empty-state"><div class="emoji">📭</div>ไม่พบข้อมูล</td></tr>';
+
+  content.innerHTML =
+    '<div class="toolbar">' +
+    '<input type="text" class="search-input" id="itemSearch" placeholder="🔍 ค้นหา SKU / ชื่อ / หมวดหมู่..." value="' + esc(filterText) + '">' +
+    '<div class="spacer"></div>' +
+    '<button class="btn btn-primary" onclick="editItem(null)">+ เพิ่มวัตถุดิบ</button>' +
+    '</div>' +
+    '<div class="table-wrap"><table><thead><tr><th>SKU</th><th>ชื่อวัตถุดิบ</th><th>หมวดหมู่</th><th>คงเหลือ</th>' +
+    '<th>ขั้นต่ำ</th><th>ราคา/หน่วย</th><th>ที่จัดเก็บ</th><th>สถานะ</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+
+  document.getElementById('itemSearch').addEventListener('input', function (e) {
+    drawItemsTable(content, e.target.value);
+  });
+}
+
+function editItem(id) {
+  var it = id ? STATE.itemsCache.filter(function (x) { return String(x.ID) === String(id); })[0] : null;
+  var cats = (STATE.categoriesCache || []).map(function (c) {
+    return '<option ' + (it && it['หมวดหมู่'] === c ? 'selected' : '') + '>' + esc(c) + '</option>';
+  }).join('');
+
+  var body =
+    '<form id="itemForm" class="form-grid">' +
+    field('SKU', 'sku', it ? it.SKU : '', !it) +
+    field('ชื่อวัตถุดิบ', 'name', it ? it['ชื่อวัตถุดิบ'] : '') +
+    '<div class="form-field"><label>หมวดหมู่</label><select id="f_cat"><option value="">-เลือก-</option>' + cats + '</select></div>' +
+    field('หน่วยนับ (เช่น กก., ลิตร, ชิ้น)', 'unit', it ? it['หน่วยนับ'] : '') +
+    field('จุดสั่งซื้อขั้นต่ำ', 'min', it ? it['จุดสั่งซื้อขั้นต่ำ'] : '0', false, 'number') +
+    field('สต๊อคสูงสุด', 'max', it ? it['สต๊อคสูงสุด'] : '0', false, 'number') +
+    field('ราคาต่อหน่วย (บาท)', 'price', it ? it['ราคาต่อหน่วย'] : '0', false, 'number') +
+    field('ผู้จำหน่ายหลัก', 'supplier', it ? it['ผู้จำหน่ายหลัก'] : '') +
+    field('ที่จัดเก็บ (โซน/ชั้นวาง)', 'loc', it ? it['ที่จัดเก็บ'] : '') +
+    '<div class="form-field"><label>สถานะ</label><select id="f_status">' +
+    '<option value="active" ' + (it && it['สถานะ'] !== 'inactive' ? 'selected' : '') + '>ใช้งาน</option>' +
+    '<option value="inactive" ' + (it && it['สถานะ'] === 'inactive' ? 'selected' : '') + '>ระงับ</option></select></div>' +
+    '</form>' +
+    '<div class="form-actions">' +
+    (it ? '<button class="btn btn-danger" onclick="deleteItemConfirm(\'' + it.ID + '\')">ลบ</button>' : '') +
+    '<button class="btn btn-ghost" onclick="closeModal()">ยกเลิก</button>' +
+    '<button class="btn btn-primary" id="saveItemBtn">บันทึก</button>' +
+    '</div>';
+
+  openModal(it ? 'แก้ไขวัตถุดิบ: ' + it['ชื่อวัตถุดิบ'] : 'เพิ่มวัตถุดิบใหม่', body, function () {
+    document.getElementById('f_cat').value = it ? it['หมวดหมู่'] : '';
+    document.getElementById('saveItemBtn').addEventListener('click', function () {
+      var payload = {
+        ID: it ? it.ID : undefined,
+        SKU: document.getElementById('f_sku').value.trim(),
+        'ชื่อวัตถุดิบ': document.getElementById('f_name').value.trim(),
+        'หมวดหมู่': document.getElementById('f_cat').value,
+        'หน่วยนับ': document.getElementById('f_unit').value.trim(),
+        'จุดสั่งซื้อขั้นต่ำ': document.getElementById('f_min').value,
+        'สต๊อคสูงสุด': document.getElementById('f_max').value,
+        'ราคาต่อหน่วย': document.getElementById('f_price').value,
+        'ผู้จำหน่ายหลัก': document.getElementById('f_supplier').value.trim(),
+        'ที่จัดเก็บ': document.getElementById('f_loc').value.trim(),
+        'สถานะ': document.getElementById('f_status').value
+      };
+      var call = it ? api('updateItem', STATE.token, payload) : api('addItem', STATE.token, payload);
+      call.then(function (res) {
+        if (!res.ok) { toast(res.message, 'error'); return; }
+        toast('บันทึกสำเร็จ', 'success');
+        closeModal();
+        renderItems(document.getElementById('content'));
+      }).catch(function (err) { toast(err.message || String(err), 'error'); });
+    });
+  });
+}
+
+function deleteItemConfirm(id) {
+  if (!confirm('ยืนยันการลบวัตถุดิบนี้? การลบไม่สามารถย้อนกลับได้')) return;
+  api('deleteItem', STATE.token, id).then(function (res) {
+    if (!res.ok) { toast(res.message, 'error'); return; }
+    toast('ลบสำเร็จ', 'success');
+    closeModal();
+    renderItems(document.getElementById('content'));
+  }).catch(function (err) { toast(err.message || String(err), 'error'); });
+}
+
+function field(label, id, value, required, type) {
+  return '<div class="form-field"><label>' + esc(label) + '</label>' +
+    '<input type="' + (type || 'text') + '" id="f_' + id + '" value="' + esc(value) + '" ' + (required ? 'required' : '') + '></div>';
+}
+
+/* ==========================================================
+   STOCK IN (รับเข้า)
+   ========================================================== */
+function renderStockIn(content) {
+  api('getItems', STATE.token).then(function (items) {
+    STATE.itemsCache = items;
+    var options = items.map(function (it) { return '<option value="' + esc(it.SKU) + '">' + esc(it.SKU) + ' — ' + esc(it['ชื่อวัตถุดิบ']) + '</option>'; }).join('');
+
+    content.innerHTML =
+      '<div class="card" style="max-width:720px;">' +
+      '<form id="stockInForm" class="form-grid">' +
+      '<div class="form-field"><label>วัตถุดิบ (SKU)</label><select id="si_sku" required><option value="">-เลือกวัตถุดิบ-</option>' + options + '</select></div>' +
+      field('วันที่รับเข้า', 'si_date', todayISO(), false, 'date') +
+      field('จำนวนรับเข้า', 'si_qty', '', true, 'number') +
+      field('Lot / Batch', 'si_lot', '') +
+      field('วันหมดอายุ', 'si_exp', '', false, 'date') +
+      field('ราคาต่อหน่วย (บาท)', 'si_price', '', false, 'number') +
+      field('ผู้จำหน่าย', 'si_supplier', '') +
+      field('เลขที่เอกสาร/PO', 'si_po', '') +
+      '<div class="form-field" style="grid-column:1/-1;"><label>หมายเหตุ</label><textarea id="si_note" rows="2"></textarea></div>' +
+      '</form>' +
+      '<div class="form-actions"><button class="btn btn-primary" id="submitStockIn">✅ บันทึกรับเข้า</button></div>' +
+      '</div>';
+
+    document.getElementById('si_sku').addEventListener('change', function () {
+      var it = items.filter(function (x) { return x.SKU === this.value; }.bind(this))[0];
+    });
+
+    document.getElementById('submitStockIn').addEventListener('click', function (e) {
+      e.preventDefault();
+      var payload = {
+        SKU: val('si_sku'), 'วันที่': val('si_date'), 'จำนวนรับเข้า': val('si_qty'),
+        'Lot/Batch': val('si_lot'), 'วันหมดอายุ': val('si_exp'), 'ราคาต่อหน่วย': val('si_price'),
+        'ผู้จำหน่าย': val('si_supplier'), 'เลขที่เอกสาร/PO': val('si_po'), 'หมายเหตุ': val('si_note')
+      };
+      if (!payload.SKU) { toast('กรุณาเลือกวัตถุดิบ', 'error'); return; }
+      api('addStockIn', STATE.token, payload).then(function (res) {
+        if (!res.ok) { toast(res.message, 'error'); return; }
+        toast('บันทึกรับเข้าสำเร็จ — คงเหลือใหม่ ' + fmtNum(res.newQty), 'success');
+        renderStockIn(content);
+      }).catch(function (err) { toast(err.message || String(err), 'error'); });
+    });
+  }).catch(showErr(content));
+}
+
+/* ==========================================================
+   STOCK OUT (เบิกออก)
+   ========================================================== */
+function renderStockOut(content) {
+  api('getItems', STATE.token).then(function (items) {
+    STATE.itemsCache = items;
+    var options = items.map(function (it) {
+      return '<option value="' + esc(it.SKU) + '" data-qty="' + it['จำนวนคงเหลือ'] + '" data-unit="' + esc(it['หน่วยนับ']) + '">' +
+        esc(it.SKU) + ' — ' + esc(it['ชื่อวัตถุดิบ']) + '</option>';
+    }).join('');
+
+    content.innerHTML =
+      '<div class="card" style="max-width:720px;">' +
+      '<form id="stockOutForm" class="form-grid">' +
+      '<div class="form-field"><label>วัตถุดิบ (SKU)</label><select id="so_sku" required><option value="">-เลือกวัตถุดิบ-</option>' + options + '</select></div>' +
+      '<div class="form-field"><label>คงเหลือปัจจุบัน</label><input type="text" id="so_avail" readonly value=""></div>' +
+      field('วันที่เบิก', 'so_date', todayISO(), false, 'date') +
+      field('จำนวนเบิก', 'so_qty', '', true, 'number') +
+      field('หน่วยงาน/แผนกที่เบิก', 'so_dept', '') +
+      field('เลขที่ใบสั่งผลิต (Job/WO)', 'so_job', '') +
+      field('ผู้เบิก', 'so_by', STATE.user.name) +
+      field('ผู้อนุมัติ', 'so_approve', '') +
+      '<div class="form-field" style="grid-column:1/-1;"><label>หมายเหตุ</label><textarea id="so_note" rows="2"></textarea></div>' +
+      '</form>' +
+      '<div class="form-actions"><button class="btn btn-danger" id="submitStockOut">📤 บันทึกเบิกออก</button></div>' +
+      '</div>';
+
+    document.getElementById('so_sku').addEventListener('change', function () {
+      var opt = this.options[this.selectedIndex];
+      document.getElementById('so_avail').value = opt.dataset.qty ? fmtNum(opt.dataset.qty) + ' ' + opt.dataset.unit : '';
+    });
+
+    document.getElementById('submitStockOut').addEventListener('click', function (e) {
+      e.preventDefault();
+      var payload = {
+        SKU: val('so_sku'), 'วันที่': val('so_date'), 'จำนวนเบิก': val('so_qty'),
+        'หน่วยงาน/แผนกที่เบิก': val('so_dept'), 'เลขที่ใบสั่งผลิต': val('so_job'),
+        'ผู้เบิก': val('so_by'), 'ผู้อนุมัติ': val('so_approve'), 'หมายเหตุ': val('so_note')
+      };
+      if (!payload.SKU) { toast('กรุณาเลือกวัตถุดิบ', 'error'); return; }
+      api('addStockOut', STATE.token, payload).then(function (res) {
+        if (!res.ok) { toast(res.message, 'error'); return; }
+        toast('บันทึกเบิกออกสำเร็จ — คงเหลือใหม่ ' + fmtNum(res.newQty), 'success');
+        renderStockOut(content);
+      }).catch(function (err) { toast(err.message || String(err), 'error'); });
+    });
+  }).catch(showErr(content));
+}
+
+/* ==========================================================
+   ADJUST (ปรับสต๊อค)
+   ========================================================== */
+function renderAdjust(content) {
+  api('getItems', STATE.token).then(function (items) {
+    STATE.itemsCache = items;
+    var options = items.map(function (it) {
+      return '<option value="' + esc(it.SKU) + '" data-qty="' + it['จำนวนคงเหลือ'] + '" data-unit="' + esc(it['หน่วยนับ']) + '">' +
+        esc(it.SKU) + ' — ' + esc(it['ชื่อวัตถุดิบ']) + '</option>';
+    }).join('');
+
+    content.innerHTML =
+      '<div class="card" style="max-width:720px;">' +
+      '<p class="muted small">ใช้เมื่อยอดในระบบไม่ตรงกับยอดนับจริง (เช่น หลังตรวจนับสต๊อคประจำงวด)</p>' +
+      '<form id="adjustForm" class="form-grid">' +
+      '<div class="form-field"><label>วัตถุดิบ (SKU)</label><select id="aj_sku" required><option value="">-เลือกวัตถุดิบ-</option>' + options + '</select></div>' +
+      '<div class="form-field"><label>จำนวนในระบบ (ก่อนปรับ)</label><input type="text" id="aj_before" readonly></div>' +
+      field('วันที่ปรับ', 'aj_date', todayISO(), false, 'date') +
+      field('จำนวนที่นับได้จริง (หลังปรับ)', 'aj_after', '', true, 'number') +
+      '<div class="form-field" style="grid-column:1/-1;"><label>สาเหตุ</label><textarea id="aj_reason" rows="2" placeholder="เช่น นับสต๊อคประจำเดือน, ของเสียหาย, ของหาย"></textarea></div>' +
+      '</form>' +
+      '<div class="form-actions"><button class="btn btn-primary" id="submitAdjust">🛠️ บันทึกการปรับสต๊อค</button></div>' +
+      '</div>';
+
+    document.getElementById('aj_sku').addEventListener('change', function () {
+      var opt = this.options[this.selectedIndex];
+      document.getElementById('aj_before').value = opt.dataset.qty ? fmtNum(opt.dataset.qty) + ' ' + opt.dataset.unit : '';
+    });
+
+    document.getElementById('submitAdjust').addEventListener('click', function (e) {
+      e.preventDefault();
+      var payload = { SKU: val('aj_sku'), 'วันที่': val('aj_date'), 'จำนวนหลังปรับ': val('aj_after'), 'สาเหตุ': val('aj_reason') };
+      if (!payload.SKU) { toast('กรุณาเลือกวัตถุดิบ', 'error'); return; }
+      api('addAdjustment', STATE.token, payload).then(function (res) {
+        if (!res.ok) { toast(res.message, 'error'); return; }
+        toast('บันทึกการปรับสต๊อคสำเร็จ', 'success');
+        renderAdjust(content);
+      }).catch(function (err) { toast(err.message || String(err), 'error'); });
+    });
+  }).catch(showErr(content));
+}
+
+/* ==========================================================
+   LEDGER (ประวัติการเคลื่อนไหว)
+   ========================================================== */
+function renderLedger(content) {
+  content.innerHTML =
+    '<div class="toolbar">' +
+    '<input type="date" id="lg_from"><input type="date" id="lg_to">' +
+    '<select id="lg_type"><option value="">ทุกประเภท</option><option value="IN">รับเข้า</option><option value="OUT">เบิกออก</option><option value="ADJUST">ปรับสต๊อค</option></select>' +
+    '<button class="btn btn-ghost" id="lg_filter">กรอง</button>' +
+    '<div class="spacer"></div>' +
+    '</div><div id="lg_table"></div>';
+
+  function load() {
+    var filters = { dateFrom: val('lg_from'), dateTo: val('lg_to'), type: val('lg_type') };
+    api('getLedger', STATE.token, filters).then(function (rows) {
+      var tbody = rows.map(function (r) {
+        var badge = r['ประเภท'] === 'IN' ? 'badge-success' : (r['ประเภท'] === 'OUT' ? 'badge-danger' : 'badge-warn');
+        var label = r['ประเภท'] === 'IN' ? 'รับเข้า' : (r['ประเภท'] === 'OUT' ? 'เบิกออก' : 'ปรับสต๊อค');
+        return '<tr><td>' + esc(r['วันที่เวลา']) + '</td><td><span class="badge ' + badge + '">' + label + '</span></td>' +
+          '<td>' + esc(r.SKU) + '</td><td>' + esc(r['ชื่อวัตถุดิบ']) + '</td><td>' + fmtNum(r['จำนวนเปลี่ยนแปลง']) + '</td>' +
+          '<td>' + fmtNum(r['คงเหลือหลังทำรายการ']) + '</td><td>' + esc(r['อ้างอิง']) + '</td><td>' + esc(r['ผู้บันทึก']) + '</td></tr>';
+      }).join('') || '<tr><td colspan="8" class="empty-state">ไม่พบรายการ</td></tr>';
+      document.getElementById('lg_table').innerHTML =
+        '<div class="table-wrap"><table><thead><tr><th>วันที่เวลา</th><th>ประเภท</th><th>SKU</th><th>ชื่อวัตถุดิบ</th>' +
+        '<th>จำนวนเปลี่ยนแปลง</th><th>คงเหลือ</th><th>อ้างอิง</th><th>ผู้บันทึก</th></tr></thead><tbody>' + tbody + '</tbody></table></div>';
+    }).catch(showErr(content));
+  }
+  document.getElementById('lg_filter').addEventListener('click', load);
+  load();
+}
+
+/* ==========================================================
+   ALERTS (แจ้งเตือน)
+   ========================================================== */
+function renderAlerts(content) {
+  Promise.all([api('getLowStock', STATE.token), api('getExpiringSoon', STATE.token, 30)]).then(function (res) {
+    var low = res[0], exp = res[1];
+    var lowRows = low.map(function (it) {
+      return '<tr><td>' + esc(it.SKU) + '</td><td>' + esc(it['ชื่อวัตถุดิบ']) + '</td>' +
+        '<td>' + fmtNum(it['จำนวนคงเหลือ']) + ' ' + esc(it['หน่วยนับ']) + '</td>' +
+        '<td>' + fmtNum(it['จุดสั่งซื้อขั้นต่ำ']) + '</td><td>' + esc(it['ผู้จำหน่ายหลัก']) + '</td></tr>';
+    }).join('') || '<tr><td colspan="5" class="empty-state">ไม่มีรายการต่ำกว่าจุดสั่งซื้อ 🎉</td></tr>';
+
+    var expRows = exp.map(function (r) {
+      var days = Math.ceil((new Date(r['วันหมดอายุ']) - new Date()) / 86400000);
+      var badge = days < 0 ? 'badge-danger' : (days <= 7 ? 'badge-danger' : 'badge-warn');
+      var lbl = days < 0 ? 'หมดอายุแล้ว' : (days + ' วัน');
+      return '<tr><td>' + esc(r.SKU) + '</td><td>' + esc(r['ชื่อวัตถุดิบ']) + '</td><td>' + esc(r['Lot/Batch']) + '</td>' +
+        '<td>' + esc(r['วันหมดอายุ']) + '</td><td><span class="badge ' + badge + '">' + lbl + '</span></td><td>' + fmtNum(r['จำนวนรับเข้า']) + '</td></tr>';
+    }).join('') || '<tr><td colspan="6" class="empty-state">ไม่มีล็อตใกล้หมดอายุ 🎉</td></tr>';
+
+    content.innerHTML =
+      '<div class="section-title"><h3>⚠️ วัตถุดิบต่ำกว่าจุดสั่งซื้อ (' + low.length + ')</h3></div>' +
+      '<div class="table-wrap"><table><thead><tr><th>SKU</th><th>ชื่อ</th><th>คงเหลือ</th><th>จุดสั่งซื้อขั้นต่ำ</th><th>ผู้จำหน่าย</th></tr></thead><tbody>' + lowRows + '</tbody></table></div>' +
+      '<div class="section-title"><h3>⏰ ล็อตใกล้หมดอายุ / หมดอายุแล้ว (' + exp.length + ')</h3></div>' +
+      '<div class="table-wrap"><table><thead><tr><th>SKU</th><th>ชื่อ</th><th>Lot</th><th>วันหมดอายุ</th><th>สถานะ</th><th>จำนวน</th></tr></thead><tbody>' + expRows + '</tbody></table></div>';
+  }).catch(showErr(content));
+}
+
+/* ==========================================================
+   REPORTS (รายงาน)
+   ========================================================== */
+function renderReports(content) {
+  content.innerHTML =
+    '<div class="toolbar">' +
+    '<select id="rp_type">' +
+    '<option value="value">มูลค่าสต๊อคปัจจุบัน</option>' +
+    '<option value="movement">รายงานการเคลื่อนไหว (ตามช่วงวันที่)</option>' +
+    '<option value="abc">ABC Analysis (จากการเบิกใช้)</option>' +
+    '</select>' +
+    '<input type="date" id="rp_from"><input type="date" id="rp_to">' +
+    '<button class="btn btn-ghost" id="rp_run">แสดงรายงาน</button>' +
+    '<div class="spacer"></div>' +
+    '<button class="btn btn-primary" id="rp_export">⬇️ Export CSV</button>' +
+    '</div><div id="rp_table"></div>';
+
+  var currentRows = [];
+
+  function run() {
+    var type = val('rp_type');
+    var call = type === 'value' ? api('reportStockValue', STATE.token)
+      : type === 'movement' ? api('reportMovement', STATE.token, val('rp_from'), val('rp_to'))
+      : api('reportABC', STATE.token, val('rp_from'), val('rp_to'));
+
+    call.then(function (rows) {
+      currentRows = rows;
+      if (!rows.length) {
+        document.getElementById('rp_table').innerHTML = '<div class="empty-state">ไม่พบข้อมูล</div>';
+        return;
+      }
+      var headers = Object.keys(rows[0]);
+      var thead = headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('');
+      var tbody = rows.map(function (r) {
+        return '<tr>' + headers.map(function (h) {
+          var v = r[h];
+          return '<td>' + (typeof v === 'number' ? fmtNum(v) : esc(v)) + '</td>';
+        }).join('') + '</tr>';
+      }).join('');
+      document.getElementById('rp_table').innerHTML =
+        '<div class="table-wrap"><table><thead><tr>' + thead + '</tr></thead><tbody>' + tbody + '</tbody></table></div>';
+    }).catch(showErr(content));
+  }
+
+  document.getElementById('rp_run').addEventListener('click', run);
+  document.getElementById('rp_export').addEventListener('click', function () {
+    if (!currentRows.length) { toast('ไม่มีข้อมูลให้ export', 'error'); return; }
+    api('exportCsv', STATE.token, currentRows).then(function (csv) {
+      var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = 'report_' + val('rp_type') + '_' + todayISO() + '.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  });
+  run();
+}
+
+/* ==========================================================
+   USERS (admin only)
+   ========================================================== */
+function renderUsers(content) {
+  if (STATE.user.role !== 'admin') { content.innerHTML = '<div class="alert alert-error">เฉพาะผู้ดูแลระบบเท่านั้น</div>'; return; }
+  api('getUsers', STATE.token).then(function (users) {
+    var rows = users.map(function (u) {
+      return '<tr><td>' + esc(u.Username) + '</td><td>' + esc(u.ชื่อสกุล) + '</td>' +
+        '<td>' + (u.Role === 'admin' ? '<span class="badge badge-warn">ผู้ดูแลระบบ</span>' : '<span class="badge badge-muted">พนักงาน</span>') + '</td>' +
+        '<td>' + (u.สถานะ === 'active' ? '<span class="badge badge-success">ใช้งาน</span>' : '<span class="badge badge-danger">ระงับ</span>') + '</td>' +
+        '<td><button class="btn btn-ghost btn-sm" onclick="editUser(\'' + u.Username + '\')">แก้ไข</button> ' +
+        '<button class="btn btn-danger btn-sm" onclick="deleteUserConfirm(\'' + u.Username + '\')">ลบ</button></td></tr>';
+    }).join('');
+    STATE.usersCache = users;
+    content.innerHTML =
+      '<div class="toolbar"><div class="spacer"></div><button class="btn btn-primary" onclick="editUser(null)">+ เพิ่มผู้ใช้งาน</button></div>' +
+      '<div class="table-wrap"><table><thead><tr><th>Username</th><th>ชื่อ-สกุล</th><th>สิทธิ์</th><th>สถานะ</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }).catch(showErr(content));
+}
+
+function editUser(username) {
+  var u = username ? STATE.usersCache.filter(function (x) { return x.Username === username; })[0] : null;
+  var body =
+    '<form id="userForm" class="form-grid">' +
+    field('Username', 'u_username', u ? u.Username : '', !u) +
+    field('รหัสผ่าน' + (u ? ' (เว้นว่างถ้าไม่เปลี่ยน)' : ''), 'u_password', '', !u, 'password') +
+    field('ชื่อ-สกุล', 'u_name', u ? u.ชื่อสกุล : '') +
+    '<div class="form-field"><label>สิทธิ์</label><select id="u_role">' +
+    '<option value="staff" ' + (u && u.Role !== 'admin' ? 'selected' : '') + '>พนักงาน</option>' +
+    '<option value="admin" ' + (u && u.Role === 'admin' ? 'selected' : '') + '>ผู้ดูแลระบบ</option></select></div>' +
+    '<div class="form-field"><label>สถานะ</label><select id="u_status">' +
+    '<option value="active" ' + (u && u.สถานะ !== 'inactive' ? 'selected' : '') + '>ใช้งาน</option>' +
+    '<option value="inactive" ' + (u && u.สถานะ === 'inactive' ? 'selected' : '') + '>ระงับ</option></select></div>' +
+    '</form>' +
+    '<div class="form-actions"><button class="btn btn-ghost" onclick="closeModal()">ยกเลิก</button><button class="btn btn-primary" id="saveUserBtn">บันทึก</button></div>';
+
+  openModal(u ? 'แก้ไขผู้ใช้งาน: ' + u.Username : 'เพิ่มผู้ใช้งานใหม่', body, function () {
+    if (u) document.getElementById('u_username').readOnly = true;
+    document.getElementById('saveUserBtn').addEventListener('click', function () {
+      var payload = {
+        Username: val('u_username'), Password: val('u_password'),
+        'ชื่อสกุล': val('u_name'), Role: val('u_role'), 'สถานะ': val('u_status')
+      };
+      var call = u ? api('updateUser', STATE.token, payload) : api('addUser', STATE.token, payload);
+      call.then(function (res) {
+        if (!res.ok) { toast(res.message, 'error'); return; }
+        toast('บันทึกสำเร็จ', 'success');
+        closeModal();
+        renderUsers(document.getElementById('content'));
+      }).catch(function (err) { toast(err.message || String(err), 'error'); });
+    });
+  });
+}
+
+function deleteUserConfirm(username) {
+  if (!confirm('ยืนยันการลบผู้ใช้งาน ' + username + '?')) return;
+  api('deleteUser', STATE.token, username).then(function (res) {
+    if (!res.ok) { toast(res.message, 'error'); return; }
+    toast('ลบสำเร็จ', 'success');
+    renderUsers(document.getElementById('content'));
+  }).catch(function (err) { toast(err.message || String(err), 'error'); });
+}
+
+/* ==========================================================
+   SETTINGS
+   ========================================================== */
+function renderSettings(content) {
+  api('getSettings', STATE.token).then(function (s) {
+    content.innerHTML =
+      '<div class="card" style="max-width:640px;">' +
+      '<h3>ตั้งค่าทั่วไป</h3>' +
+      '<form class="form-grid">' +
+      field('ชื่อบริษัท', 'st_company', s.CompanyName || '') +
+      field('แจ้งเตือนล่วงหน้าก่อนหมดอายุ (วัน)', 'st_expdays', s.ExpiryAlertDays || 30, false, 'number') +
+      field('อีเมลรับการแจ้งเตือน', 'st_email', s.AlertEmail || '', false, 'email') +
+      '<div class="form-field"><label>เปิดการแจ้งเตือนอัตโนมัติทางอีเมล (รายวัน)</label>' +
+      '<select id="st_enabled"><option value="TRUE" ' + (s.LowStockEmailEnabled == 'TRUE' ? 'selected' : '') + '>เปิด</option>' +
+      '<option value="FALSE" ' + (s.LowStockEmailEnabled == 'FALSE' ? 'selected' : '') + '>ปิด</option></select></div>' +
+      '</form>' +
+      '<div class="form-actions"><button class="btn btn-primary" id="saveSettingsBtn">บันทึกการตั้งค่า</button></div>' +
+      '</div>' +
+
+      '<div class="card" style="max-width:640px;margin-top:16px;">' +
+      '<h3>หมวดหมู่วัตถุดิบ</h3>' +
+      '<div style="display:flex;gap:8px;"><input type="text" id="newCatInput" placeholder="ชื่อหมวดหมู่ใหม่" style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:8px;">' +
+      '<button class="btn btn-ghost" id="addCatBtn">+ เพิ่ม</button></div>' +
+      '</div>' +
+
+      '<div class="card" style="max-width:640px;margin-top:16px;">' +
+      '<h3>เปลี่ยนรหัสผ่านของฉัน</h3>' +
+      '<form class="form-grid">' +
+      field('รหัสผ่านเดิม', 'pw_old', '', false, 'password') +
+      field('รหัสผ่านใหม่', 'pw_new', '', false, 'password') +
+      '</form>' +
+      '<div class="form-actions"><button class="btn btn-ghost" id="changePwBtn">เปลี่ยนรหัสผ่าน</button></div>' +
+      '</div>';
+
+    document.getElementById('saveSettingsBtn').addEventListener('click', function () {
+      api('saveSettings', STATE.token, {
+        CompanyName: val('st_company'), ExpiryAlertDays: val('st_expdays'),
+        AlertEmail: val('st_email'), LowStockEmailEnabled: val('st_enabled')
+      }).then(function (res) {
+        if (!res.ok) { toast(res.message || 'ไม่มีสิทธิ์', 'error'); return; }
+        toast('บันทึกการตั้งค่าสำเร็จ', 'success');
+      }).catch(function (err) { toast(err.message || String(err), 'error'); });
+    });
+
+    document.getElementById('addCatBtn').addEventListener('click', function () {
+      var name = val('newCatInput');
+      if (!name) return;
+      api('addCategory', STATE.token, name).then(function (res) {
+        if (res.ok) { toast('เพิ่มหมวดหมู่สำเร็จ', 'success'); document.getElementById('newCatInput').value = ''; }
+        else toast(res.message, 'error');
+      });
+    });
+
+    document.getElementById('changePwBtn').addEventListener('click', function () {
+      var oldPw = val('pw_old'), newPw = val('pw_new');
+      if (!oldPw || !newPw) { toast('กรุณากรอกรหัสผ่านให้ครบ', 'error'); return; }
+      api('changeMyPassword', STATE.token, oldPw, newPw).then(function (res) {
+        if (!res.ok) { toast(res.message, 'error'); return; }
+        toast('เปลี่ยนรหัสผ่านสำเร็จ', 'success');
+      }).catch(function (err) { toast(err.message || String(err), 'error'); });
+    });
+  }).catch(showErr(content));
+}
+
+/* ---------- helpers ---------- */
+function val(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+function todayISO() {
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+</script>

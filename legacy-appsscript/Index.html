@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <title>Stock Pro</title>
+  <?!= include('CSS'); ?>
+</head>
+<body>
+
+  <!-- ===================== LOGIN SCREEN ===================== -->
+  <div id="loginScreen" class="login-wrap">
+    <div class="login-card">
+      <div class="login-logo">📦</div>
+      <h1>Stock Pro</h1>
+      <p class="muted">ระบบสต๊อควัตถุดิบโรงงาน</p>
+      <div id="loginError" class="alert alert-error" style="display:none;"></div>
+      <form id="loginForm">
+        <label>ชื่อผู้ใช้งาน</label>
+        <input type="text" id="loginUsername" autocomplete="username" required>
+        <label>รหัสผ่าน</label>
+        <input type="password" id="loginPassword" autocomplete="current-password" required>
+        <button type="submit" class="btn btn-primary btn-block" id="loginBtn">เข้าสู่ระบบ</button>
+      </form>
+      <p class="muted small">ค่าเริ่มต้น: admin / admin1234</p>
+    </div>
+  </div>
+
+  <!-- ===================== APP SHELL ===================== -->
+  <div id="appShell" class="app-shell" style="display:none;">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <span class="logo">📦</span>
+        <span class="brand">Stock Pro</span>
+        <button class="sidebar-close" id="sidebarClose">✕</button>
+      </div>
+      <nav class="nav" id="navMenu">
+        <a href="#" class="nav-item" data-page="dashboard"><span class="ico">🏠</span>แดชบอร์ด</a>
+        <a href="#" class="nav-item" data-page="items"><span class="ico">📋</span>ข้อมูลวัตถุดิบ</a>
+        <a href="#" class="nav-item" data-page="stockin"><span class="ico">⬇️</span>รับเข้า</a>
+        <a href="#" class="nav-item" data-page="stockout"><span class="ico">⬆️</span>เบิกออก</a>
+        <a href="#" class="nav-item" data-page="adjust"><span class="ico">🛠️</span>ปรับสต๊อค</a>
+        <a href="#" class="nav-item" data-page="ledger"><span class="ico">📜</span>ประวัติการเคลื่อนไหว</a>
+        <a href="#" class="nav-item" data-page="alerts"><span class="ico">🔔</span>แจ้งเตือน</a>
+        <a href="#" class="nav-item" data-page="reports"><span class="ico">📊</span>รายงาน</a>
+        <a href="#" class="nav-item" data-page="users" id="navUsers"><span class="ico">👥</span>ผู้ใช้งาน</a>
+        <a href="#" class="nav-item" data-page="settings" id="navSettings"><span class="ico">⚙️</span>ตั้งค่า</a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-chip">
+          <div class="avatar" id="userAvatar">?</div>
+          <div>
+            <div class="user-name" id="userName">-</div>
+            <div class="user-role" id="userRole">-</div>
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-block" id="logoutBtn">ออกจากระบบ</button>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" id="hamburgerBtn">☰</button>
+        <h2 id="pageTitle">แดชบอร์ด</h2>
+        <div class="topbar-right">
+          <span id="clock" class="muted small"></span>
+        </div>
+      </header>
+      <main class="content" id="content">
+        <div class="loading-spinner" id="globalLoader"><div class="spinner"></div></div>
+      </main>
+    </div>
+  </div>
+
+  <div id="toastContainer" class="toast-container"></div>
+  <div id="modalRoot"></div>
+
+  <?!= include('JS'); ?>
+</body>
+</html>
