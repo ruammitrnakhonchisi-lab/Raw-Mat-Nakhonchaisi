@@ -40,7 +40,7 @@ export const api = {
 
   getRecentStockIn: (limit) =>
     unwrap(
-      supabase.from('stock_in').select('*, profiles(display_name)').order('created_at', { ascending: false }).limit(limit || 10)
+      supabase.from('stock_in').select('*, profiles!recorded_by(display_name)').order('created_at', { ascending: false }).limit(limit || 10)
     ).then(flattenRecordedBy),
 
   /* ---------- stock out ---------- */
