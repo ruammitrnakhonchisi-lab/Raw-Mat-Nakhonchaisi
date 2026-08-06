@@ -18,13 +18,13 @@ function drawStockInForm(content) {
   const items = STATE.itemsCache || [];
   const options = items.map((it) =>
     '<option value="' + esc(it.sku) + '" data-price="' + it.unit_price + '" data-supplier="' + esc(it.primary_supplier) + '">' +
-    esc(it.sku) + ' — ' + esc(it.name) + '</option>'
+    esc(it.name) + '</option>'
   ).join('');
 
   content.innerHTML =
     '<div class="card" style="max-width:760px;">' +
     '<div class="toolbar" style="margin-bottom:0;">' +
-    '<div class="form-field" style="flex:1;min-width:220px;"><label>วัตถุดิบ (SKU)</label>' +
+    '<div class="form-field" style="flex:1;min-width:220px;"><label>วัตถุดิบ</label>' +
     '<select id="si_sku" required><option value="">-เลือกวัตถุดิบ-</option>' + options + '</select></div>' +
     '<button type="button" class="btn btn-ghost" id="si_newItemBtn" style="margin-top:20px;">+ วัตถุดิบใหม่</button>' +
     '</div>' +

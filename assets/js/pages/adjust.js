@@ -9,14 +9,14 @@ export async function renderAdjust(content) {
 
     const options = items.map((it) =>
       '<option value="' + esc(it.sku) + '" data-qty="' + it.qty_on_hand + '" data-unit="' + esc(it.unit) + '">' +
-      esc(it.sku) + ' — ' + esc(it.name) + '</option>'
+      esc(it.name) + '</option>'
     ).join('');
 
     content.innerHTML =
       '<div class="card" style="max-width:720px;">' +
       '<p class="muted small">ใช้เมื่อยอดในระบบไม่ตรงกับยอดนับจริง (เช่น หลังตรวจนับสต๊อคประจำงวด)</p>' +
       '<form id="adjustForm" class="form-grid">' +
-      '<div class="form-field"><label>วัตถุดิบ (SKU)</label><select id="aj_sku" required><option value="">-เลือกวัตถุดิบ-</option>' + options + '</select></div>' +
+      '<div class="form-field"><label>วัตถุดิบ</label><select id="aj_sku" required><option value="">-เลือกวัตถุดิบ-</option>' + options + '</select></div>' +
       '<div class="form-field"><label>จำนวนในระบบ (ก่อนปรับ)</label><input type="text" id="aj_before" readonly></div>' +
       field('วันที่ปรับ', 'aj_date', todayISO(), false, 'date') +
       field('จำนวนที่นับได้จริง (หลังปรับ)', 'aj_after', '', true, 'number') +

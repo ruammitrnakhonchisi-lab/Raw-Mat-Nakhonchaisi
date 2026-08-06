@@ -10,13 +10,13 @@ export async function renderStockOut(content) {
 
     const options = items.map((it) =>
       '<option value="' + esc(it.sku) + '" data-qty="' + it.qty_on_hand + '" data-unit="' + esc(it.unit) + '">' +
-      esc(it.sku) + ' — ' + esc(it.name) + '</option>'
+      esc(it.name) + '</option>'
     ).join('');
 
     content.innerHTML =
       '<div class="card" style="max-width:720px;">' +
       '<form id="stockOutForm" class="form-grid">' +
-      '<div class="form-field"><label>วัตถุดิบ (SKU)</label><select id="so_sku" required><option value="">-เลือกวัตถุดิบ-</option>' + options + '</select></div>' +
+      '<div class="form-field"><label>วัตถุดิบ</label><select id="so_sku" required><option value="">-เลือกวัตถุดิบ-</option>' + options + '</select></div>' +
       '<div class="form-field"><label>คงเหลือปัจจุบัน</label><input type="text" id="so_avail" readonly value=""></div>' +
       field('วันที่เบิก', 'so_date', todayISO(), false, 'date') +
       field('จำนวนเบิก', 'so_qty', '', true, 'number') +
