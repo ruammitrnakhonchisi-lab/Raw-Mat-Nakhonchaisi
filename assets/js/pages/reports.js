@@ -1,24 +1,129 @@
 import { api } from '../api.js';
-import { esc, fmtNum, val, todayISO, toast, showErr, downloadCsv } from '../ui.js';
+import { esc, fmtNum, fmtMoney, val, todayISO, toast, showErr, downloadCsv } from '../ui.js';
+
+/* หมวดหมู่ที่ต้องการให้สรุปแยกเป็นส่วนๆ ในรายงานวัตถุดิบคงเหลือ เรียงตามลำดับที่กำหนด
+   ส่วนที่ไม่ตรงกับรายการนี้จะถูกจัดกลุ่มตามชื่อหมวดหมู่จริงต่อท้ายโดยอัตโนมัติ */
+const CATEGORY_SECTIONS = [
+  { title: 'PC wire', match: ['pc wire'] },
+  { title: 'ลวดปั่นปลอก', match: ['ลวดปั่นปลอก'] },
+  { title: 'เหล็กหนวดกุ้ง', match: ['เหล็กหนวดกุ้ง'] },
+  { title: 'หัวเพลท', match: ['หัวเพลท'] },
+  { title: 'น้ำยาเร่งคอนกรีต', match: ['น้ำยาเร่งคอนกรีต'] },
+  { title: 'เหล็กเสริม และเหล็กเข็มเจาะ', match: ['เหล็กเสริม', 'เหล็กเข็มเจาะ'] },
+];
+
+function norm(s) {
+  return String(s || '').trim().toLowerCase();
+}
+
+function findSection(category) {
+  const c = norm(category);
+  return CATEGORY_SECTIONS.find((s) => s.match.indexOf(c) > -1);
+}
+
+function groupRowsByCategory(rows) {
+  const groups = CATEGORY_SECTIONS.map((s) => ({ title: s.title, rows: [] }));
+  const extraMap = {};
+  rows.forEach((r) => {
+    const section = findSection(r['หมวดหมู่']);
+    if (section) {
+      groups.find((g) => g.title === section.title).rows.push(r);
+    } else {
+      const key = String(r['หมวดหมู่'] || '').trim() || 'ไม่ระบุหมวดหมู่';
+      (extraMap[key] = extraMap[key] || []).push(r);
+    }
+  });
+  const extraGroups = Object.keys(extraMap)
+    .sort((a, b) => a.localeCompare(b, 'th'))
+    .map((key) => ({ title: key, rows: extraMap[key] }));
+  return groups.concat(extraGroups).filter((g) => g.rows.length);
+}
 
 export function renderReports(content) {
   content.innerHTML =
-    '<div class="toolbar">' +
+    '<div id="rp_printHeader" class="print-header"></div>' +
+    '<div class="toolbar no-print">' +
     '<select id="rp_type">' +
-    '<option value="value">มูลค่าสต๊อคปัจจุบัน</option>' +
+    '<option value="value">สรุปวัตถุดิบคงเหลือ (แยกตามหมวดหมู่)</option>' +
     '<option value="movement">รายงานการเคลื่อนไหว (ตามช่วงวันที่)</option>' +
     '<option value="abc">ABC Analysis (จากการเบิกใช้)</option>' +
     '</select>' +
     '<input type="date" id="rp_from"><input type="date" id="rp_to">' +
     '<button class="btn btn-ghost" id="rp_run">แสดงรายงาน</button>' +
     '<div class="spacer"></div>' +
+    '<button class="btn btn-ghost" id="rp_print">🖨️ พิมพ์ / PDF</button>' +
+    '<button class="btn btn-ghost" id="rp_png">🖼️ บันทึกเป็น PNG</button>' +
     '<button class="btn btn-primary" id="rp_export">⬇️ Export CSV</button>' +
     '</div><div id="rp_table"></div>';
 
   let currentRows = [];
+  let companyName = '';
+
+  api.getSettings().then((s) => { companyName = s.CompanyName || ''; }).catch(() => {});
+
+  function printHeaderHtml(title) {
+    return '<h2>' + esc(companyName || 'Stock Pro') + '</h2>' +
+      '<div>' + esc(title) + '</div>' +
+      '<div class="muted small">พิมพ์เมื่อ ' + esc(new Date().toLocaleString('th-TH')) + '</div>';
+  }
+
+  function renderCategoryReport(rows) {
+    const groups = groupRowsByCategory(rows);
+    const grandTotal = rows.reduce((s, r) => s + (Number(r['มูลค่ารวม']) || 0), 0);
+
+    const chips = groups.map((g) => {
+      const subtotal = g.rows.reduce((s, r) => s + (Number(r['มูลค่ารวม']) || 0), 0);
+      return '<div class="cat-chip"><span class="cat-chip-name">' + esc(g.title) + '</span>' +
+        '<span class="cat-chip-value">' + fmtMoney(subtotal) + '</span></div>';
+    }).join('');
+
+    const sections = groups.map((g) => {
+      const subtotal = g.rows.reduce((s, r) => s + (Number(r['มูลค่ารวม']) || 0), 0);
+      const body = g.rows.map((r) =>
+        '<tr><td>' + esc(r.SKU) + '</td><td>' + esc(r['ชื่อวัตถุดิบ']) + '</td><td>' + esc(r['หน่วยนับ']) + '</td>' +
+        '<td class="num">' + fmtNum(r['จำนวนคงเหลือ']) + '</td>' +
+        '<td class="num">' + fmtMoney(r['ราคาต่อหน่วย']) + '</td>' +
+        '<td class="num">' + fmtMoney(r['มูลค่ารวม']) + '</td></tr>'
+      ).join('');
+      return '<div class="card report-section">' +
+        '<div class="report-section-head"><h3>' + esc(g.title) + '</h3>' +
+        '<span class="badge badge-muted">' + g.rows.length + ' รายการ</span></div>' +
+        '<div class="table-wrap"><table><thead><tr><th>SKU</th><th>ชื่อวัตถุดิบ</th><th>หน่วย</th>' +
+        '<th class="num">คงเหลือ</th><th class="num">ราคา/หน่วย</th><th class="num">มูลค่ารวม</th></tr></thead>' +
+        '<tbody>' + body + '</tbody>' +
+        '<tfoot><tr class="subtotal-row"><td colspan="5">รวม ' + esc(g.title) + '</td>' +
+        '<td class="num">' + fmtMoney(subtotal) + '</td></tr></tfoot>' +
+        '</table></div></div>';
+    }).join('');
+
+    return '<div id="rp_printArea">' +
+      '<div class="report-summary-row">' + chips + '</div>' +
+      '<div class="grand-total-card">มูลค่าสต๊อคคงเหลือรวมทั้งหมด <b>' + fmtMoney(grandTotal) + '</b></div>' +
+      sections +
+      '</div>';
+  }
+
+  function renderFlatTable(rows) {
+    const headers = Object.keys(rows[0]);
+    const thead = headers.map((h) => '<th>' + esc(h) + '</th>').join('');
+    const tbody = rows.map((r) =>
+      '<tr>' + headers.map((h) => {
+        const v = r[h];
+        return '<td>' + (typeof v === 'number' ? fmtNum(v) : esc(v)) + '</td>';
+      }).join('') + '</tr>'
+    ).join('');
+    return '<div id="rp_printArea"><div class="table-wrap"><table><thead><tr>' + thead +
+      '</tr></thead><tbody>' + tbody + '</tbody></table></div></div>';
+  }
 
   async function run() {
     const type = val('rp_type');
+    const titles = {
+      value: 'สรุปวัตถุดิบคงเหลือ (แยกตามหมวดหมู่)',
+      movement: 'รายงานการเคลื่อนไหว',
+      abc: 'ABC Analysis (จากการเบิกใช้)',
+    };
+    document.getElementById('rp_printHeader').innerHTML = printHeaderHtml(titles[type]);
     try {
       if (type === 'value') currentRows = await reportStockValue();
       else if (type === 'movement') currentRows = await reportMovement(val('rp_from'), val('rp_to'));
@@ -28,16 +133,8 @@ export function renderReports(content) {
         document.getElementById('rp_table').innerHTML = '<div class="empty-state">ไม่พบข้อมูล</div>';
         return;
       }
-      const headers = Object.keys(currentRows[0]);
-      const thead = headers.map((h) => '<th>' + esc(h) + '</th>').join('');
-      const tbody = currentRows.map((r) =>
-        '<tr>' + headers.map((h) => {
-          const v = r[h];
-          return '<td>' + (typeof v === 'number' ? fmtNum(v) : esc(v)) + '</td>';
-        }).join('') + '</tr>'
-      ).join('');
       document.getElementById('rp_table').innerHTML =
-        '<div class="table-wrap"><table><thead><tr>' + thead + '</tr></thead><tbody>' + tbody + '</tbody></table></div>';
+        type === 'value' ? renderCategoryReport(currentRows) : renderFlatTable(currentRows);
     } catch (err) {
       showErr(content)(err);
     }
@@ -47,6 +144,41 @@ export function renderReports(content) {
   document.getElementById('rp_export').addEventListener('click', function () {
     if (!currentRows.length) { toast('ไม่มีข้อมูลให้ export', 'error'); return; }
     downloadCsv(currentRows, 'report_' + val('rp_type') + '_' + todayISO() + '.csv');
+  });
+  document.getElementById('rp_print').addEventListener('click', function () {
+    if (!currentRows.length) { toast('ไม่มีข้อมูลให้พิมพ์', 'error'); return; }
+    window.print();
+  });
+  document.getElementById('rp_png').addEventListener('click', async function () {
+    const area = document.getElementById('rp_printArea');
+    if (!area) { toast('ไม่มีข้อมูลให้บันทึก', 'error'); return; }
+    toast('กำลังสร้างรูปภาพ...', 'success');
+    try {
+      const { default: html2canvas } = await import('https://esm.sh/html2canvas@1.4.1');
+      const wrap = document.createElement('div');
+      wrap.style.background = '#ffffff';
+      wrap.style.padding = '20px';
+      wrap.appendChild(document.getElementById('rp_printHeader').cloneNode(true));
+      wrap.firstChild.style.display = 'block';
+      wrap.appendChild(area.cloneNode(true));
+      wrap.style.position = 'fixed';
+      wrap.style.left = '-99999px';
+      wrap.style.top = '0';
+      wrap.style.width = area.offsetWidth + 'px';
+      document.body.appendChild(wrap);
+      const canvas = await html2canvas(wrap, { backgroundColor: '#ffffff', scale: 2 });
+      document.body.removeChild(wrap);
+      canvas.toBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'report_' + val('rp_type') + '_' + todayISO() + '.png';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    } catch (err) {
+      toast('สร้างรูปภาพไม่สำเร็จ: ' + err.message, 'error');
+    }
   });
   run();
 }
