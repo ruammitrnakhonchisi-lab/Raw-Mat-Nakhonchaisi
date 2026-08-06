@@ -72,6 +72,16 @@ export function closeModal() {
   document.getElementById('modalRoot').innerHTML = '';
 }
 
+/** ป็อปอัพแจ้งว่าบันทึกสำเร็จ ใช้ร่วมกันหลังบันทึกรับเข้า/เบิกออก */
+export function showSuccessPopup(title, lines) {
+  const body = '<div class="success-modal"><div class="success-icon">✅</div>' +
+    lines.map((l, i) => '<p' + (i > 0 ? ' class="success-sub"' : '') + '>' + esc(l) + '</p>').join('') +
+    '<button class="btn btn-primary" id="successPopupOk">ตกลง</button></div>';
+  openModal(title, body, function () {
+    document.getElementById('successPopupOk').addEventListener('click', closeModal);
+  });
+}
+
 /** Convert an array of flat objects to CSV text (BOM prefixed for Excel/Thai). */
 export function toCsv(rows) {
   if (!rows || !rows.length) return '';

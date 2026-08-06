@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { STATE as AUTH } from '../auth.js';
 import { STATE } from '../app.js';
-import { esc, fmtNum, field, val, todayISO, toast, showErr } from '../ui.js';
+import { esc, fmtNum, field, val, todayISO, toast, showErr, showSuccessPopup } from '../ui.js';
 
 export async function renderStockOut(content) {
   try {
@@ -41,6 +41,7 @@ export async function renderStockOut(content) {
       if (!sku) { toast('กรุณาเลือกวัตถุดิบ', 'error'); return; }
       const qty = Number(val('so_qty'));
       if (!qty || qty <= 0) { toast('กรุณาระบุจำนวนเบิกให้ถูกต้อง', 'error'); return; }
+      const itemName = document.getElementById('so_sku').selectedOptions[0].text;
 
       btn.disabled = true;
       try {
@@ -54,8 +55,12 @@ export async function renderStockOut(content) {
           p_approved_by: val('so_approve'),
           p_note: val('so_note'),
         });
-        toast('บันทึกเบิกออกสำเร็จ — คงเหลือใหม่ ' + fmtNum(res.new_qty), 'success');
+        toast('บันทึกเบิกออกสำเร็จ', 'success');
         renderStockOut(content);
+        showSuccessPopup('เบิกออกสำเร็จ', [
+          'เบิกออก ' + itemName + ' จำนวน ' + fmtNum(qty) + ' หน่วย',
+          'คงเหลือใหม่: ' + fmtNum(res.new_qty),
+        ]);
       } catch (err) {
         toast(err.message || String(err), 'error');
         btn.disabled = false;

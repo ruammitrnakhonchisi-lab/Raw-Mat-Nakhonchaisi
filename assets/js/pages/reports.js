@@ -1,42 +1,10 @@
 import { api } from '../api.js';
 import { esc, fmtNum, fmtMoney, val, todayISO, toast, showErr, downloadCsv } from '../ui.js';
-
-/* หมวดหมู่ที่ต้องการให้สรุปแยกเป็นส่วนๆ ในรายงานวัตถุดิบคงเหลือ เรียงตามลำดับที่กำหนด
-   ส่วนที่ไม่ตรงกับรายการนี้จะถูกจัดกลุ่มตามชื่อหมวดหมู่จริงต่อท้ายโดยอัตโนมัติ */
-const CATEGORY_SECTIONS = [
-  { title: 'PC wire', match: ['pc wire'] },
-  { title: 'ลวดปั่นปลอก', match: ['ลวดปั่นปลอก'] },
-  { title: 'เหล็กหนวดกุ้ง', match: ['เหล็กหนวดกุ้ง'] },
-  { title: 'หัวเพลท', match: ['หัวเพลท'] },
-  { title: 'น้ำยาเร่งคอนกรีต', match: ['น้ำยาเร่งคอนกรีต'] },
-  { title: 'เหล็กเสริม และเหล็กเข็มเจาะ', match: ['เหล็กเสริม', 'เหล็กเข็มเจาะ'] },
-];
-
-function norm(s) {
-  return String(s || '').trim().toLowerCase();
-}
-
-function findSection(category) {
-  const c = norm(category);
-  return CATEGORY_SECTIONS.find((s) => s.match.indexOf(c) > -1);
-}
+import { groupByCategory } from '../report-categories.js';
 
 function groupRowsByCategory(rows) {
-  const groups = CATEGORY_SECTIONS.map((s) => ({ title: s.title, rows: [] }));
-  const extraMap = {};
-  rows.forEach((r) => {
-    const section = findSection(r['หมวดหมู่']);
-    if (section) {
-      groups.find((g) => g.title === section.title).rows.push(r);
-    } else {
-      const key = String(r['หมวดหมู่'] || '').trim() || 'ไม่ระบุหมวดหมู่';
-      (extraMap[key] = extraMap[key] || []).push(r);
-    }
-  });
-  const extraGroups = Object.keys(extraMap)
-    .sort((a, b) => a.localeCompare(b, 'th'))
-    .map((key) => ({ title: key, rows: extraMap[key] }));
-  return groups.concat(extraGroups).filter((g) => g.rows.length);
+  return groupByCategory(rows, (r) => r['หมวดหมู่'])
+    .map((g) => ({ title: g.title, rows: g.items }));
 }
 
 export function renderReports(content) {

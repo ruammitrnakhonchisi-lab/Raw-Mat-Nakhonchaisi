@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { STATE as AUTH } from '../auth.js';
 import { STATE } from '../app.js';
-import { esc, fmtNum, fmtMoney, field, val, todayISO, toast, showErr, openModal, closeModal } from '../ui.js';
+import { esc, fmtNum, fmtMoney, field, val, todayISO, toast, showErr, openModal, closeModal, showSuccessPopup } from '../ui.js';
 
 export async function renderStockIn(content) {
   try {
@@ -61,6 +61,8 @@ function drawStockInForm(content) {
     const qty = Number(val('si_qty'));
     if (!qty || qty <= 0) { toast('กรุณาระบุจำนวนรับเข้าให้ถูกต้อง', 'error'); return; }
 
+    const itemName = document.getElementById('si_sku').selectedOptions[0].text;
+
     btn.disabled = true;
     try {
       const res = await api.recordStockIn({
@@ -74,8 +76,12 @@ function drawStockInForm(content) {
         p_po_number: val('si_po'),
         p_note: val('si_note'),
       });
-      toast('บันทึกรับเข้าสำเร็จ — คงเหลือใหม่ ' + fmtNum(res.new_qty), 'success');
+      toast('บันทึกรับเข้าสำเร็จ', 'success');
       renderStockIn(content);
+      showSuccessPopup('รับเข้าสำเร็จ', [
+        'รับเข้า ' + itemName + ' จำนวน ' + fmtNum(qty) + ' หน่วย',
+        'คงเหลือใหม่: ' + fmtNum(res.new_qty),
+      ]);
     } catch (err) {
       toast(err.message || String(err), 'error');
       btn.disabled = false;

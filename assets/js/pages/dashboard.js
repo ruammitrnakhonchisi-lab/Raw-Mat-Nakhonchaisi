@@ -1,5 +1,14 @@
 import { api } from '../api.js';
+import { STATE as AUTH } from '../auth.js';
 import { esc, fmtNum, fmtMoney, statCard, showErr, todayISO } from '../ui.js';
+import { groupByCategory } from '../report-categories.js';
+
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'สวัสดีตอนเช้า';
+  if (h < 17) return 'สวัสดีตอนบ่าย';
+  return 'สวัสดีตอนเย็น';
+}
 
 export async function renderDashboard(content) {
   try {
@@ -63,12 +72,40 @@ export async function renderDashboard(content) {
         '</div><div class="lbl">' + day + '</div></div>';
     }).join('');
 
+    const catGroups = groupByCategory(items, (it) => it.category)
+      .map((g) => ({
+        title: g.title,
+        count: g.items.length,
+        value: g.items.reduce((s, it) => s + Number(it.qty_on_hand) * Number(it.unit_price), 0),
+      }))
+      .sort((a, b) => b.value - a.value);
+    const catMax = Math.max.apply(null, catGroups.map((g) => g.value).concat([1]));
+    const catRows = catGroups.map((g) =>
+      '<div class="cat-bar-row"><span class="name">' + esc(g.title) + '</span>' +
+      '<div class="cat-bar-track"><div class="cat-bar-fill" style="width:' + Math.max(Math.round((g.value / catMax) * 100), 2) + '%"></div></div>' +
+      '<span class="cat-bar-value">' + fmtMoney(g.value) + '</span></div>'
+    ).join('') || '<div class="empty-state">ยังไม่มีข้อมูล</div>';
+
+    const userName = (AUTH.profile && AUTH.profile.display_name) || '';
+
     content.innerHTML =
-      '<div class="grid grid-4">' +
+      '<div class="dash-hero">' +
+        '<div><h2>' + greeting() + (userName ? ', ' + esc(userName) : '') + ' 👋</h2>' +
+        '<div class="muted small">' + esc(new Date().toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })) + '</div></div>' +
+        '<div class="quick-actions">' +
+          '<button class="btn btn-primary" onclick="navigate(\'stockin\')">⬇️ รับเข้า</button>' +
+          '<button class="btn btn-danger" onclick="navigate(\'stockout\')">⬆️ เบิกออก</button>' +
+          '<button class="btn btn-ghost" onclick="navigate(\'adjust\')">🛠️ ปรับสต๊อค</button>' +
+          '<button class="btn btn-ghost" onclick="navigate(\'reports\')">📊 รายงาน</button>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="grid grid-5">' +
       statCard('📦', 'รายการวัตถุดิบทั้งหมด', items.length, '') +
       statCard('⚠️', 'ต่ำกว่าจุดสั่งซื้อ', lowStock.length, 'danger') +
       statCard('⏰', 'ใกล้หมดอายุ', expiring.length, 'warn') +
       statCard('💰', 'มูลค่าสต๊อครวม', fmtMoney(totalValue), 'success') +
+      statCard('📝', 'ธุรกรรมวันนี้', todayTx.length, '') +
       '</div>' +
 
       '<div class="grid grid-2" style="margin-top:16px;">' +
@@ -77,10 +114,12 @@ export async function renderDashboard(content) {
           '<span><span style="display:inline-block;width:10px;height:10px;background:#1e8e5a;border-radius:2px;"></span> รับเข้า</span>' +
           '<span><span style="display:inline-block;width:10px;height:10px;background:#d93025;border-radius:2px;"></span> เบิกออก</span></div>' +
           '<div class="bar-chart">' + chartBars + '</div></div>' +
-        '<div class="card"><h3>รายการล่าสุด</h3>' +
-          '<div class="table-wrap" style="border:none;"><table><thead><tr><th>เวลา</th><th>ประเภท</th><th>วัตถุดิบ</th><th>จำนวน</th><th>ผู้บันทึก</th></tr></thead>' +
-          '<tbody>' + recentRows + '</tbody></table></div></div>' +
+        '<div class="card"><h3>มูลค่าสต๊อคตามหมวดหมู่</h3><div class="cat-bar-list">' + catRows + '</div></div>' +
       '</div>' +
+
+      '<div class="card" style="margin-top:16px;"><h3>รายการล่าสุด</h3>' +
+        '<div class="table-wrap" style="border:none;"><table><thead><tr><th>เวลา</th><th>ประเภท</th><th>วัตถุดิบ</th><th>จำนวน</th><th>ผู้บันทึก</th></tr></thead>' +
+        '<tbody>' + recentRows + '</tbody></table></div></div>' +
 
       '<div class="section-title"><h3>⚠️ วัตถุดิบต่ำกว่าจุดสั่งซื้อ</h3><a href="#" onclick="navigate(\'items\');return false;" class="small">ดูทั้งหมด →</a></div>' +
       '<div class="table-wrap"><table><thead><tr><th>SKU</th><th>ชื่อวัตถุดิบ</th><th>คงเหลือ</th><th>สถานะ</th></tr></thead><tbody>' + lowRows + '</tbody></table></div>' +
