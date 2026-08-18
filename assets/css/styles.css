@@ -116,6 +116,10 @@ tr:hover td{background:#fafbfd;}
 .toolbar input, .toolbar select{padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;}
 .search-input{flex:1;min-width:180px;}
 .spacer{flex:1;}
+@media(max-width:700px){
+  .toolbar input, .toolbar select, .toolbar .btn{width:100%;}
+  .toolbar .spacer{display:none;}
+}
 
 /* ---------- Forms ---------- */
 .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
@@ -125,6 +129,10 @@ tr:hover td{background:#fafbfd;}
   border:1px solid var(--border);border-radius:8px;font-size:13.5px;font-family:inherit;}
 .form-field input:focus,.form-field select:focus,.form-field textarea:focus{outline:none;border-color:var(--primary);}
 .form-actions{display:flex;gap:10px;margin-top:18px;justify-content:flex-end;}
+@media(max-width:700px){
+  .form-actions{flex-direction:column-reverse;}
+  .form-actions .btn{width:100%;}
+}
 
 /* ---------- Modal ---------- */
 .modal-overlay{position:fixed;inset:0;background:rgba(15,20,35,.5);display:flex;align-items:center;
@@ -162,6 +170,27 @@ tr:hover td{background:#fafbfd;}
 .bar.in{background:var(--success);}
 .bar.out{background:var(--danger);}
 .bar-col .lbl{font-size:10px;color:var(--muted);}
+
+/* ---------- Responsive table/card toggle ---------- */
+@media(max-width:700px){
+  .desktop-only{display:none;}
+}
+
+/* ---------- Item cards (mobile) ---------- */
+.item-card-list{display:none;flex-direction:column;gap:10px;}
+@media(max-width:700px){
+  .item-card-list{display:flex;}
+}
+.item-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:14px;box-shadow:0 1px 3px rgba(20,30,60,.05);}
+.item-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+.item-card-name{font-weight:700;font-size:14.5px;}
+.item-card-meta{font-size:12px;color:var(--muted);margin-top:2px;}
+.item-card-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0;}
+.item-card-stats .lbl{display:block;font-size:11px;color:var(--muted);}
+.item-card-stats .val{display:block;font-size:13.5px;font-weight:700;margin-top:2px;}
+.item-card-loc{font-size:12px;color:var(--muted);margin-bottom:10px;}
+.item-card.voided{opacity:.5;text-decoration:line-through;}
 
 /* ---------- Dashboard ---------- */
 .dash-hero{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;margin-bottom:18px;}

@@ -18,15 +18,18 @@ function drawItemsTable(content, filterText) {
   const q = filterText.toLowerCase();
   const filtered = items.filter((it) => !q || (it.sku + it.name + it.category).toLowerCase().indexOf(q) > -1);
 
-  const rows = filtered.map((it) => {
-    const qty = Number(it.qty_on_hand);
-    const min = Number(it.reorder_point);
-    const max = Number(it.max_stock);
-    const status = qty <= min
+  function statusBadge(qty, min, max) {
+    return qty <= min
       ? '<span class="badge badge-danger">ต่ำกว่าขั้นต่ำ</span>'
       : (max > 0 && qty >= max
         ? '<span class="badge badge-warn">เกินสูงสุด</span>'
         : '<span class="badge badge-success">ปกติ</span>');
+  }
+
+  const rows = filtered.map((it) => {
+    const qty = Number(it.qty_on_hand);
+    const min = Number(it.reorder_point);
+    const max = Number(it.max_stock);
     return '<tr>' +
       '<td>' + esc(it.sku) + '</td>' +
       '<td>' + esc(it.name) + '</td>' +
@@ -35,10 +38,28 @@ function drawItemsTable(content, filterText) {
       '<td>' + fmtNum(min) + '</td>' +
       '<td>' + fmtMoney(it.unit_price) + '</td>' +
       '<td>' + esc(it.storage_location) + '</td>' +
-      '<td>' + status + '</td>' +
+      '<td>' + statusBadge(qty, min, max) + '</td>' +
       '<td><button class="btn btn-ghost btn-sm" data-edit="' + it.id + '">แก้ไข</button></td>' +
       '</tr>';
   }).join('') || '<tr><td colspan="9" class="empty-state"><div class="emoji">📭</div>ไม่พบข้อมูล</td></tr>';
+
+  const cards = filtered.map((it) => {
+    const qty = Number(it.qty_on_hand);
+    const min = Number(it.reorder_point);
+    const max = Number(it.max_stock);
+    return '<div class="item-card">' +
+      '<div class="item-card-top"><div><div class="item-card-name">' + esc(it.name) + '</div>' +
+      '<div class="item-card-meta">' + esc(it.sku) + (it.category ? ' • ' + esc(it.category) : '') + '</div></div>' +
+      statusBadge(qty, min, max) + '</div>' +
+      '<div class="item-card-stats">' +
+      '<div><span class="lbl">คงเหลือ</span><span class="val">' + fmtNum(qty) + ' ' + esc(it.unit) + '</span></div>' +
+      '<div><span class="lbl">ขั้นต่ำ</span><span class="val">' + fmtNum(min) + '</span></div>' +
+      '<div><span class="lbl">ราคา/หน่วย</span><span class="val">' + fmtMoney(it.unit_price) + '</span></div>' +
+      '</div>' +
+      (it.storage_location ? '<div class="item-card-loc">📍 ' + esc(it.storage_location) + '</div>' : '') +
+      '<button class="btn btn-ghost btn-sm btn-block" data-edit="' + it.id + '">แก้ไข</button>' +
+      '</div>';
+  }).join('') || '<div class="empty-state"><div class="emoji">📭</div>ไม่พบข้อมูล</div>';
 
   content.innerHTML =
     '<div class="toolbar">' +
@@ -46,8 +67,9 @@ function drawItemsTable(content, filterText) {
     '<div class="spacer"></div>' +
     '<button class="btn btn-primary" id="addItemBtn">+ เพิ่มวัตถุดิบ</button>' +
     '</div>' +
-    '<div class="table-wrap"><table><thead><tr><th>SKU</th><th>ชื่อวัตถุดิบ</th><th>หมวดหมู่</th><th>คงเหลือ</th>' +
-    '<th>ขั้นต่ำ</th><th>ราคา/หน่วย</th><th>ที่จัดเก็บ</th><th>สถานะ</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    '<div class="table-wrap desktop-only"><table><thead><tr><th>SKU</th><th>ชื่อวัตถุดิบ</th><th>หมวดหมู่</th><th>คงเหลือ</th>' +
+    '<th>ขั้นต่ำ</th><th>ราคา/หน่วย</th><th>ที่จัดเก็บ</th><th>สถานะ</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    '<div class="item-card-list">' + cards + '</div>';
 
   document.getElementById('itemSearch').addEventListener('input', (e) => drawItemsTable(content, e.target.value));
   document.getElementById('addItemBtn').addEventListener('click', () => editItem(null, content));

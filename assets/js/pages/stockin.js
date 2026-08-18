@@ -144,6 +144,13 @@ async function loadRecentReceipts(content) {
   try {
     const rows = await api.getRecentStockIn(10);
     const isAdmin = AUTH.profile && AUTH.profile.role === 'admin';
+
+    function voidControl(r, voided) {
+      return voided
+        ? '<span class="badge badge-muted">ยกเลิกแล้ว</span>'
+        : (isAdmin ? '<button class="btn btn-ghost btn-sm" data-void="' + r.id + '">ยกเลิกรายการ</button>' : '');
+    }
+
     const body = rows.map((r) => {
       const voided = !!r.voided_at;
       return '<tr' + (voided ? ' style="opacity:.5;text-decoration:line-through;"' : '') + '>' +
@@ -151,15 +158,28 @@ async function loadRecentReceipts(content) {
         '<td>' + esc(r.sku) + '</td><td>' + esc(r.item_name) + '</td>' +
         '<td>' + fmtNum(r.qty) + '</td><td>' + esc(r.lot_batch) + '</td>' +
         '<td>' + esc(r.po_number) + '</td><td>' + esc(r.recorded_by_name) + '</td>' +
-        '<td>' + (voided
-          ? '<span class="badge badge-muted">ยกเลิกแล้ว</span>'
-          : (isAdmin ? '<button class="btn btn-ghost btn-sm" data-void="' + r.id + '">ยกเลิกรายการ</button>' : '')) +
-        '</td></tr>';
+        '<td>' + voidControl(r, voided) + '</td></tr>';
     }).join('') || '<tr><td colspan="8" class="empty-state">ยังไม่มีรายการรับเข้า</td></tr>';
 
+    const cards = rows.map((r) => {
+      const voided = !!r.voided_at;
+      return '<div class="item-card' + (voided ? ' voided' : '') + '">' +
+        '<div class="item-card-top"><div><div class="item-card-name">' + esc(r.item_name) + '</div>' +
+        '<div class="item-card-meta">' + esc(r.sku) + ' • ' + esc(new Date(r.created_at).toLocaleString('th-TH')) + '</div></div>' +
+        voidControl(r, voided) + '</div>' +
+        '<div class="item-card-stats">' +
+        '<div><span class="lbl">จำนวน</span><span class="val">' + fmtNum(r.qty) + '</span></div>' +
+        '<div><span class="lbl">Lot</span><span class="val">' + esc(r.lot_batch || '-') + '</span></div>' +
+        '<div><span class="lbl">PO</span><span class="val">' + esc(r.po_number || '-') + '</span></div>' +
+        '</div>' +
+        '<div class="item-card-loc">ผู้บันทึก: ' + esc(r.recorded_by_name || '-') + '</div>' +
+        '</div>';
+    }).join('') || '<div class="empty-state">ยังไม่มีรายการรับเข้า</div>';
+
     target.innerHTML =
-      '<div class="table-wrap"><table><thead><tr><th>เวลา</th><th>SKU</th><th>ชื่อวัตถุดิบ</th><th>จำนวน</th>' +
-      '<th>Lot</th><th>PO</th><th>ผู้บันทึก</th><th></th></tr></thead><tbody>' + body + '</tbody></table></div>';
+      '<div class="table-wrap desktop-only"><table><thead><tr><th>เวลา</th><th>SKU</th><th>ชื่อวัตถุดิบ</th><th>จำนวน</th>' +
+      '<th>Lot</th><th>PO</th><th>ผู้บันทึก</th><th></th></tr></thead><tbody>' + body + '</tbody></table></div>' +
+      '<div class="item-card-list">' + cards + '</div>';
 
     target.querySelectorAll('[data-void]').forEach((btn) => {
       btn.addEventListener('click', async function () {
