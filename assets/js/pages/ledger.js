@@ -4,6 +4,14 @@ import { esc, fmtNum, val, showErr } from '../ui.js';
 const TYPE_LABEL = { IN: 'รับเข้า', OUT: 'เบิกออก', ADJUST: 'ปรับสต๊อค', VOID_IN: 'ยกเลิกรับเข้า' };
 const TYPE_BADGE = { IN: 'badge-success', OUT: 'badge-danger', ADJUST: 'badge-warn', VOID_IN: 'badge-muted' };
 
+/** แสดงวันที่ทำรายการจริง (txn_date) แทนวันที่บันทึกเข้าระบบ เพื่อให้รายการย้อนหลัง
+ * แสดงวันที่ถูกต้อง — ถ้ายังไม่ได้รัน migration (add_ledger_txn_date.sql) จะ fallback ไปใช้ created_at */
+function txnDateLabel(r) {
+  return r.txn_date
+    ? new Date(r.txn_date + 'T00:00:00').toLocaleDateString('th-TH')
+    : new Date(r.created_at).toLocaleString('th-TH');
+}
+
 export function renderLedger(content) {
   content.innerHTML =
     '<div class="toolbar">' +
@@ -20,7 +28,7 @@ export function renderLedger(content) {
       const tbody = rows.map((r) => {
         const badge = TYPE_BADGE[r.txn_type] || 'badge-muted';
         const label = TYPE_LABEL[r.txn_type] || r.txn_type;
-        return '<tr><td>' + esc(new Date(r.created_at).toLocaleString('th-TH')) + '</td><td><span class="badge ' + badge + '">' + label + '</span></td>' +
+        return '<tr><td>' + esc(txnDateLabel(r)) + '</td><td><span class="badge ' + badge + '">' + label + '</span></td>' +
           '<td>' + esc(r.sku) + '</td><td>' + esc(r.item_name) + '</td><td>' + fmtNum(r.delta) + '</td>' +
           '<td>' + fmtNum(r.balance_after) + '</td><td>' + esc(r.ref) + '</td><td>' + esc(r.recorded_by_name) + '</td></tr>';
       }).join('') || '<tr><td colspan="8" class="empty-state">ไม่พบรายการ</td></tr>';
@@ -30,7 +38,7 @@ export function renderLedger(content) {
         const label = TYPE_LABEL[r.txn_type] || r.txn_type;
         return '<div class="item-card">' +
           '<div class="item-card-top"><div><div class="item-card-name">' + esc(r.item_name) + '</div>' +
-          '<div class="item-card-meta">' + esc(r.sku) + ' • ' + esc(new Date(r.created_at).toLocaleString('th-TH')) + '</div></div>' +
+          '<div class="item-card-meta">' + esc(r.sku) + ' • ' + esc(txnDateLabel(r)) + '</div></div>' +
           '<span class="badge ' + badge + '">' + label + '</span></div>' +
           '<div class="item-card-stats">' +
           '<div><span class="lbl">เปลี่ยนแปลง</span><span class="val">' + fmtNum(r.delta) + '</span></div>' +
@@ -42,7 +50,7 @@ export function renderLedger(content) {
       }).join('') || '<div class="empty-state">ไม่พบรายการ</div>';
 
       document.getElementById('lg_table').innerHTML =
-        '<div class="table-wrap desktop-only"><table><thead><tr><th>วันที่เวลา</th><th>ประเภท</th><th>SKU</th><th>ชื่อวัตถุดิบ</th>' +
+        '<div class="table-wrap desktop-only"><table><thead><tr><th>วันที่</th><th>ประเภท</th><th>SKU</th><th>ชื่อวัตถุดิบ</th>' +
         '<th>จำนวนเปลี่ยนแปลง</th><th>คงเหลือ</th><th>อ้างอิง</th><th>ผู้บันทึก</th></tr></thead><tbody>' + tbody + '</tbody></table></div>' +
         '<div class="item-card-list">' + cards + '</div>';
     } catch (err) {

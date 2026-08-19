@@ -96,6 +96,7 @@ create table if not exists public.adjustments (
 create table if not exists public.ledger (
   id bigint generated always as identity primary key,
   txn_type text not null check (txn_type in ('IN', 'OUT', 'ADJUST', 'VOID_IN')),
+  txn_date date not null default current_date,
   sku text not null,
   item_name text not null,
   delta numeric not null,

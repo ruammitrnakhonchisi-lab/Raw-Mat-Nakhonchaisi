@@ -35,7 +35,7 @@ export async function renderDashboard(content) {
       const dStr = d.toISOString().slice(0, 10);
       let inSum = 0, outSum = 0;
       ledger.forEach((r) => {
-        if (String(r.created_at).indexOf(dStr) === 0) {
+        if ((r.txn_date || String(r.created_at).slice(0, 10)) === dStr) {
           if (r.txn_type === 'IN') inSum += Number(r.delta);
           if (r.txn_type === 'OUT') outSum += Math.abs(Number(r.delta));
         }

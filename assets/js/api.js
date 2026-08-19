@@ -62,8 +62,8 @@ export const api = {
     let q = supabase.from('ledger').select('*, profiles(display_name)').order('created_at', { ascending: false });
     if (filters.sku) q = q.eq('sku', filters.sku);
     if (filters.type) q = q.eq('txn_type', filters.type);
-    if (filters.dateFrom) q = q.gte('created_at', filters.dateFrom);
-    if (filters.dateTo) q = q.lte('created_at', filters.dateTo + 'T23:59:59');
+    if (filters.dateFrom) q = q.gte('txn_date', filters.dateFrom);
+    if (filters.dateTo) q = q.lte('txn_date', filters.dateTo);
     return unwrap(q.limit(filters.limit || 2000)).then(flattenRecordedBy);
   },
 

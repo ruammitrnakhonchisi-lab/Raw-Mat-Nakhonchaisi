@@ -53,6 +53,7 @@ declare
   v_price numeric;
   v_new_qty numeric;
   v_id bigint;
+  v_txn_date date;
 begin
   if not public.is_active_user() then
     raise exception 'AUTH: ต้องเข้าสู่ระบบก่อน';
@@ -66,6 +67,7 @@ begin
     raise exception 'ไม่พบวัตถุดิบ SKU: %', p_sku;
   end if;
 
+  v_txn_date := coalesce(p_txn_date, current_date);
   v_price := coalesce(p_unit_price, v_item.unit_price, 0);
   v_new_qty := v_item.qty_on_hand + p_qty;
 
@@ -73,14 +75,14 @@ begin
     txn_date, item_id, sku, item_name, lot_batch, expiry_date,
     qty, unit_price, supplier, po_number, recorded_by, note
   ) values (
-    coalesce(p_txn_date, current_date), v_item.id, v_item.sku, v_item.name, p_lot_batch, p_expiry_date,
+    v_txn_date, v_item.id, v_item.sku, v_item.name, p_lot_batch, p_expiry_date,
     p_qty, v_price, coalesce(nullif(p_supplier, ''), v_item.primary_supplier), p_po_number, auth.uid(), p_note
   ) returning id into v_id;
 
   update public.items set qty_on_hand = v_new_qty, updated_at = now() where id = v_item.id;
 
-  insert into public.ledger (txn_type, sku, item_name, delta, balance_after, ref, recorded_by, note)
-  values ('IN', v_item.sku, v_item.name, p_qty, v_new_qty, 'stock_in#' || v_id, auth.uid(), p_note);
+  insert into public.ledger (txn_type, txn_date, sku, item_name, delta, balance_after, ref, recorded_by, note)
+  values ('IN', v_txn_date, v_item.sku, v_item.name, p_qty, v_new_qty, 'stock_in#' || v_id, auth.uid(), p_note);
 
   return query select v_id, v_new_qty;
 end;
@@ -187,6 +189,7 @@ declare
   v_new_qty numeric;
   v_id bigint;
   v_requested_by text;
+  v_txn_date date;
 begin
   if not public.is_active_user() then
     raise exception 'AUTH: ต้องเข้าสู่ระบบก่อน';
@@ -204,6 +207,7 @@ begin
     raise exception 'จำนวนคงเหลือไม่เพียงพอ (คงเหลือ % %)', v_item.qty_on_hand, v_item.unit;
   end if;
 
+  v_txn_date := coalesce(p_txn_date, current_date);
   v_new_qty := v_item.qty_on_hand - p_qty;
   select coalesce(nullif(p_requested_by, ''), display_name) into v_requested_by
     from public.profiles where id = auth.uid();
@@ -212,14 +216,14 @@ begin
     txn_date, item_id, sku, item_name, qty, department, job_order_no,
     requested_by, approved_by, recorded_by, note
   ) values (
-    coalesce(p_txn_date, current_date), v_item.id, v_item.sku, v_item.name, p_qty, p_department, p_job_order_no,
+    v_txn_date, v_item.id, v_item.sku, v_item.name, p_qty, p_department, p_job_order_no,
     coalesce(v_requested_by, ''), p_approved_by, auth.uid(), p_note
   ) returning id into v_id;
 
   update public.items set qty_on_hand = v_new_qty, updated_at = now() where id = v_item.id;
 
-  insert into public.ledger (txn_type, sku, item_name, delta, balance_after, ref, recorded_by, note)
-  values ('OUT', v_item.sku, v_item.name, -p_qty, v_new_qty, 'stock_out#' || v_id, auth.uid(), p_note);
+  insert into public.ledger (txn_type, txn_date, sku, item_name, delta, balance_after, ref, recorded_by, note)
+  values ('OUT', v_txn_date, v_item.sku, v_item.name, -p_qty, v_new_qty, 'stock_out#' || v_id, auth.uid(), p_note);
 
   return query select v_id, v_new_qty;
 end;
@@ -240,6 +244,7 @@ declare
   v_item public.items%rowtype;
   v_diff numeric;
   v_id bigint;
+  v_txn_date date;
 begin
   if not public.is_active_user() then
     raise exception 'AUTH: ต้องเข้าสู่ระบบก่อน';
@@ -253,16 +258,17 @@ begin
     raise exception 'ไม่พบวัตถุดิบ SKU: %', p_sku;
   end if;
 
+  v_txn_date := coalesce(p_txn_date, current_date);
   v_diff := p_qty_after - v_item.qty_on_hand;
 
   insert into public.adjustments (txn_date, item_id, sku, item_name, qty_before, qty_after, reason, recorded_by)
-  values (coalesce(p_txn_date, current_date), v_item.id, v_item.sku, v_item.name, v_item.qty_on_hand, p_qty_after, p_reason, auth.uid())
+  values (v_txn_date, v_item.id, v_item.sku, v_item.name, v_item.qty_on_hand, p_qty_after, p_reason, auth.uid())
   returning id into v_id;
 
   update public.items set qty_on_hand = p_qty_after, updated_at = now() where id = v_item.id;
 
-  insert into public.ledger (txn_type, sku, item_name, delta, balance_after, ref, recorded_by, note)
-  values ('ADJUST', v_item.sku, v_item.name, v_diff, p_qty_after, 'adjust#' || v_id, auth.uid(), p_reason);
+  insert into public.ledger (txn_type, txn_date, sku, item_name, delta, balance_after, ref, recorded_by, note)
+  values ('ADJUST', v_txn_date, v_item.sku, v_item.name, v_diff, p_qty_after, 'adjust#' || v_id, auth.uid(), p_reason);
 
   return query select v_id, p_qty_after;
 end;

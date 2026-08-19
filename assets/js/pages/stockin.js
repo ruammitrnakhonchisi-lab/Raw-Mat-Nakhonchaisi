@@ -151,10 +151,16 @@ async function loadRecentReceipts(content) {
         : (isAdmin ? '<button class="btn btn-ghost btn-sm" data-void="' + r.id + '">ยกเลิกรายการ</button>' : '');
     }
 
+    function txnDateLabel(r) {
+      return r.txn_date
+        ? new Date(r.txn_date + 'T00:00:00').toLocaleDateString('th-TH')
+        : new Date(r.created_at).toLocaleString('th-TH');
+    }
+
     const body = rows.map((r) => {
       const voided = !!r.voided_at;
       return '<tr' + (voided ? ' style="opacity:.5;text-decoration:line-through;"' : '') + '>' +
-        '<td>' + esc(new Date(r.created_at).toLocaleString('th-TH')) + '</td>' +
+        '<td>' + esc(txnDateLabel(r)) + '</td>' +
         '<td>' + esc(r.sku) + '</td><td>' + esc(r.item_name) + '</td>' +
         '<td>' + fmtNum(r.qty) + '</td><td>' + esc(r.lot_batch) + '</td>' +
         '<td>' + esc(r.po_number) + '</td><td>' + esc(r.recorded_by_name) + '</td>' +
@@ -165,7 +171,7 @@ async function loadRecentReceipts(content) {
       const voided = !!r.voided_at;
       return '<div class="item-card' + (voided ? ' voided' : '') + '">' +
         '<div class="item-card-top"><div><div class="item-card-name">' + esc(r.item_name) + '</div>' +
-        '<div class="item-card-meta">' + esc(r.sku) + ' • ' + esc(new Date(r.created_at).toLocaleString('th-TH')) + '</div></div>' +
+        '<div class="item-card-meta">' + esc(r.sku) + ' • ' + esc(txnDateLabel(r)) + '</div></div>' +
         voidControl(r, voided) + '</div>' +
         '<div class="item-card-stats">' +
         '<div><span class="lbl">จำนวน</span><span class="val">' + fmtNum(r.qty) + '</span></div>' +
@@ -177,7 +183,7 @@ async function loadRecentReceipts(content) {
     }).join('') || '<div class="empty-state">ยังไม่มีรายการรับเข้า</div>';
 
     target.innerHTML =
-      '<div class="table-wrap desktop-only"><table><thead><tr><th>เวลา</th><th>SKU</th><th>ชื่อวัตถุดิบ</th><th>จำนวน</th>' +
+      '<div class="table-wrap desktop-only"><table><thead><tr><th>วันที่</th><th>SKU</th><th>ชื่อวัตถุดิบ</th><th>จำนวน</th>' +
       '<th>Lot</th><th>PO</th><th>ผู้บันทึก</th><th></th></tr></thead><tbody>' + body + '</tbody></table></div>' +
       '<div class="item-card-list">' + cards + '</div>';
 

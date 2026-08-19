@@ -7,13 +7,29 @@ export async function renderItems(content) {
     const [items, categories] = await Promise.all([api.getItems(), api.getCategories()]);
     STATE.itemsCache = items;
     STATE.categoriesCache = categories;
-    drawItemsTable(content, '');
+    drawItemsShell(content);
+    updateItemsList(content, '');
   } catch (err) {
     showErr(content)(err);
   }
 }
 
-function drawItemsTable(content, filterText) {
+/** วาดโครงหน้า (ช่องค้นหา + ปุ่มเพิ่ม) แค่ครั้งเดียว เพื่อไม่ให้ input เสีย focus
+ * ทุกครั้งที่พิมพ์ — เดิม innerHTML ทั้งหน้าถูกวาดใหม่ทุก keystroke ทำให้พิมพ์ได้ทีละตัวอักษร */
+function drawItemsShell(content) {
+  content.innerHTML =
+    '<div class="toolbar">' +
+    '<input type="text" class="search-input" id="itemSearch" placeholder="🔍 ค้นหา SKU / ชื่อ / หมวดหมู่...">' +
+    '<div class="spacer"></div>' +
+    '<button class="btn btn-primary" id="addItemBtn">+ เพิ่มวัตถุดิบ</button>' +
+    '</div>' +
+    '<div id="itemsListArea"></div>';
+
+  document.getElementById('itemSearch').addEventListener('input', (e) => updateItemsList(content, e.target.value));
+  document.getElementById('addItemBtn').addEventListener('click', () => editItem(null, content));
+}
+
+function updateItemsList(content, filterText) {
   const items = STATE.itemsCache || [];
   const q = filterText.toLowerCase();
   const filtered = items.filter((it) => !q || (it.sku + it.name + it.category).toLowerCase().indexOf(q) > -1);
@@ -61,18 +77,11 @@ function drawItemsTable(content, filterText) {
       '</div>';
   }).join('') || '<div class="empty-state"><div class="emoji">📭</div>ไม่พบข้อมูล</div>';
 
-  content.innerHTML =
-    '<div class="toolbar">' +
-    '<input type="text" class="search-input" id="itemSearch" placeholder="🔍 ค้นหา SKU / ชื่อ / หมวดหมู่..." value="' + esc(filterText) + '">' +
-    '<div class="spacer"></div>' +
-    '<button class="btn btn-primary" id="addItemBtn">+ เพิ่มวัตถุดิบ</button>' +
-    '</div>' +
+  document.getElementById('itemsListArea').innerHTML =
     '<div class="table-wrap desktop-only"><table><thead><tr><th>SKU</th><th>ชื่อวัตถุดิบ</th><th>หมวดหมู่</th><th>คงเหลือ</th>' +
     '<th>ขั้นต่ำ</th><th>ราคา/หน่วย</th><th>ที่จัดเก็บ</th><th>สถานะ</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
     '<div class="item-card-list">' + cards + '</div>';
 
-  document.getElementById('itemSearch').addEventListener('input', (e) => drawItemsTable(content, e.target.value));
-  document.getElementById('addItemBtn').addEventListener('click', () => editItem(null, content));
   content.querySelectorAll('[data-edit]').forEach((btn) => {
     btn.addEventListener('click', () => editItem(Number(btn.dataset.edit), content));
   });

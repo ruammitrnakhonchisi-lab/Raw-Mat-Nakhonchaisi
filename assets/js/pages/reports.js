@@ -29,9 +29,13 @@ export function renderReports(content) {
 
   api.getSettings().then((s) => { companyName = s.CompanyName || ''; }).catch(() => {});
 
-  function printHeaderHtml(title) {
+  function printHeaderHtml(title, dateFrom, dateTo) {
+    const rangeLine = (dateFrom || dateTo)
+      ? '<div class="small">ช่วงวันที่: ' + esc(dateFrom || '(ไม่ระบุ)') + ' ถึง ' + esc(dateTo || '(ไม่ระบุ)') + '</div>'
+      : '';
     return '<h2>' + esc(companyName || 'Stock Pro') + '</h2>' +
       '<div>' + esc(title) + '</div>' +
+      rangeLine +
       '<div class="muted small">พิมพ์เมื่อ ' + esc(new Date().toLocaleString('th-TH')) + '</div>';
   }
 
@@ -48,18 +52,18 @@ export function renderReports(content) {
     const sections = groups.map((g) => {
       const subtotal = g.rows.reduce((s, r) => s + (Number(r['มูลค่ารวม']) || 0), 0);
       const body = g.rows.map((r) =>
-        '<tr><td>' + esc(r.SKU) + '</td><td>' + esc(r['ชื่อวัตถุดิบ']) + '</td><td>' + esc(r['หน่วยนับ']) + '</td>' +
-        '<td class="num">' + fmtNum(r['จำนวนคงเหลือ']) + '</td>' +
+        '<tr><td>' + esc(r['ชื่อวัตถุดิบ']) + '</td><td>' + esc(r['หน่วยนับ']) + '</td>' +
+        '<td class="num"><strong>' + fmtNum(r['จำนวนคงเหลือ']) + '</strong></td>' +
         '<td class="num">' + fmtMoney(r['ราคาต่อหน่วย']) + '</td>' +
         '<td class="num">' + fmtMoney(r['มูลค่ารวม']) + '</td></tr>'
       ).join('');
       return '<div class="card report-section">' +
         '<div class="report-section-head"><h3>' + esc(g.title) + '</h3>' +
         '<span class="badge badge-muted">' + g.rows.length + ' รายการ</span></div>' +
-        '<div class="table-wrap"><table><thead><tr><th>SKU</th><th>ชื่อวัตถุดิบ</th><th>หน่วย</th>' +
+        '<div class="table-wrap"><table><thead><tr><th>ชื่อวัตถุดิบ</th><th>หน่วย</th>' +
         '<th class="num">คงเหลือ</th><th class="num">ราคา/หน่วย</th><th class="num">มูลค่ารวม</th></tr></thead>' +
         '<tbody>' + body + '</tbody>' +
-        '<tfoot><tr class="subtotal-row"><td colspan="5">รวม ' + esc(g.title) + '</td>' +
+        '<tfoot><tr class="subtotal-row"><td colspan="4">รวม ' + esc(g.title) + '</td>' +
         '<td class="num">' + fmtMoney(subtotal) + '</td></tr></tfoot>' +
         '</table></div></div>';
     }).join('');
@@ -91,7 +95,9 @@ export function renderReports(content) {
       movement: 'รายงานการเคลื่อนไหว',
       abc: 'ABC Analysis (จากการเบิกใช้)',
     };
-    document.getElementById('rp_printHeader').innerHTML = printHeaderHtml(titles[type]);
+    const dateFrom = type === 'value' ? '' : val('rp_from');
+    const dateTo = type === 'value' ? '' : val('rp_to');
+    document.getElementById('rp_printHeader').innerHTML = printHeaderHtml(titles[type], dateFrom, dateTo);
     try {
       if (type === 'value') currentRows = await reportStockValue();
       else if (type === 'movement') currentRows = await reportMovement(val('rp_from'), val('rp_to'));
