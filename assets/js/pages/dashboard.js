@@ -87,6 +87,7 @@ export async function renderDashboard(content) {
     ).join('') || '<div class="empty-state">ยังไม่มีข้อมูล</div>';
 
     const userName = (AUTH.profile && AUTH.profile.display_name) || '';
+    const isAdmin = AUTH.profile && AUTH.profile.role === 'admin';
 
     content.innerHTML =
       '<div class="dash-hero">' +
@@ -95,7 +96,7 @@ export async function renderDashboard(content) {
         '<div class="quick-actions">' +
           '<button class="btn btn-primary" onclick="navigate(\'stockin\')">⬇️ รับเข้า</button>' +
           '<button class="btn btn-danger" onclick="navigate(\'stockout\')">⬆️ เบิกออก</button>' +
-          '<button class="btn btn-ghost" onclick="navigate(\'adjust\')">🛠️ ปรับสต๊อค</button>' +
+          (isAdmin ? '<button class="btn btn-ghost" onclick="navigate(\'adjust\')">🛠️ ปรับสต๊อค</button>' : '') +
           '<button class="btn btn-ghost" onclick="navigate(\'reports\')">📊 รายงาน</button>' +
         '</div>' +
       '</div>' +

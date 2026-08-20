@@ -1,8 +1,13 @@
 import { api } from '../api.js';
 import { STATE } from '../app.js';
+import { STATE as AUTH } from '../auth.js';
 import { esc, fmtNum, field, val, todayISO, toast, showErr } from '../ui.js';
 
 export async function renderAdjust(content) {
+  if (!AUTH.profile || AUTH.profile.role !== 'admin') {
+    content.innerHTML = '<div class="alert alert-error">เฉพาะผู้ดูแลระบบเท่านั้นที่ปรับสต๊อคได้</div>';
+    return;
+  }
   try {
     const items = await api.getItems();
     STATE.itemsCache = items;

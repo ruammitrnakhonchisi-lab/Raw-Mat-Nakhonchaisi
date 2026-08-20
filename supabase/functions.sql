@@ -246,8 +246,8 @@ declare
   v_id bigint;
   v_txn_date date;
 begin
-  if not public.is_active_user() then
-    raise exception 'AUTH: ต้องเข้าสู่ระบบก่อน';
+  if not public.is_admin() then
+    raise exception 'AUTH: เฉพาะผู้ดูแลระบบเท่านั้นที่ปรับสต๊อคได้';
   end if;
   if p_qty_after is null or p_qty_after < 0 then
     raise exception 'กรุณาระบุจำนวนหลังปรับให้ถูกต้อง';

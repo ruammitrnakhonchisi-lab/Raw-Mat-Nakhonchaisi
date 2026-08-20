@@ -60,6 +60,7 @@ function showApp() {
   document.getElementById('userRole').textContent = AUTH.profile.role === 'admin' ? 'ผู้ดูแลระบบ' : 'พนักงาน';
   document.getElementById('userAvatar').textContent = name.charAt(0).toUpperCase();
   document.getElementById('navUsers').style.display = AUTH.profile.role === 'admin' ? '' : 'none';
+  document.getElementById('navAdjust').style.display = AUTH.profile.role === 'admin' ? '' : 'none';
   navigate('dashboard');
 }
 window.showApp = showApp;
