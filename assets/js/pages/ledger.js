@@ -12,9 +12,20 @@ function txnDateLabel(r) {
     : new Date(r.created_at).toLocaleString('th-TH');
 }
 
-export function renderLedger(content) {
+export async function renderLedger(content) {
+  let items = [];
+  try {
+    items = await api.getItems();
+  } catch (err) {
+    // ไม่ต้องบล็อกทั้งหน้าถ้าโหลดรายชื่อวัตถุดิบไม่สำเร็จ — แค่ตัวกรองวัตถุดิบจะว่างไป
+  }
+  const itemOptions = items.map((it) =>
+    '<option value="' + esc(it.sku) + '">' + esc(it.sku) + ' — ' + esc(it.name) + '</option>'
+  ).join('');
+
   content.innerHTML =
     '<div class="toolbar">' +
+    '<select id="lg_sku"><option value="">ทุกวัตถุดิบ</option>' + itemOptions + '</select>' +
     '<input type="date" id="lg_from"><input type="date" id="lg_to">' +
     '<select id="lg_type"><option value="">ทุกประเภท</option><option value="IN">รับเข้า</option>' +
     '<option value="OUT">เบิกออก</option><option value="ADJUST">ปรับสต๊อค</option><option value="VOID_IN">ยกเลิกรับเข้า</option></select>' +
@@ -24,7 +35,7 @@ export function renderLedger(content) {
 
   async function load() {
     try {
-      const rows = await api.getLedger({ dateFrom: val('lg_from'), dateTo: val('lg_to'), type: val('lg_type') });
+      const rows = await api.getLedger({ sku: val('lg_sku'), dateFrom: val('lg_from'), dateTo: val('lg_to'), type: val('lg_type') });
       const tbody = rows.map((r) => {
         const badge = TYPE_BADGE[r.txn_type] || 'badge-muted';
         const label = TYPE_LABEL[r.txn_type] || r.txn_type;
