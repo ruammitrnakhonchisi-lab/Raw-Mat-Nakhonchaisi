@@ -49,6 +49,7 @@ create table if not exists public.stock_in (
   lot_batch text not null default '',
   expiry_date date,
   qty numeric not null check (qty > 0),
+  remaining_qty numeric not null default 0 check (remaining_qty >= 0 and remaining_qty <= qty),
   unit_price numeric not null default 0,
   total_value numeric generated always as (qty * unit_price) stored,
   supplier text not null default '',
@@ -68,6 +69,7 @@ create table if not exists public.stock_out (
   sku text not null,
   item_name text not null,
   qty numeric not null check (qty > 0),
+  coil_stock_in_id bigint references public.stock_in (id),
   department text not null default '',
   job_order_no text not null default '',
   requested_by text not null default '',
@@ -126,6 +128,7 @@ on conflict (name) do nothing;
 
 create index if not exists idx_stock_in_item_id on public.stock_in (item_id);
 create index if not exists idx_stock_in_created_at on public.stock_in (created_at desc);
+create index if not exists idx_stock_in_available_coil on public.stock_in (item_id, remaining_qty) where voided_at is null;
 create index if not exists idx_stock_out_item_id on public.stock_out (item_id);
 create index if not exists idx_ledger_sku on public.ledger (sku);
 create index if not exists idx_ledger_created_at on public.ledger (created_at desc);

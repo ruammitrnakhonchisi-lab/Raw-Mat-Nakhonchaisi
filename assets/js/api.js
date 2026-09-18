@@ -43,6 +43,13 @@ export const api = {
       supabase.from('stock_in').select('*, profiles!recorded_by(display_name)').order('created_at', { ascending: false }).limit(limit || 10)
     ).then(flattenRecordedBy),
 
+  /** Coil ที่ยังมีของเหลืออยู่สำหรับวัตถุดิบชิ้นนี้ (ใช้เลือกตอนเบิกออกแบบเจาะจง coil เช่น PC wire) */
+  getAvailableCoils: (itemId) =>
+    unwrap(
+      supabase.from('stock_in').select('id, lot_batch, remaining_qty, txn_date, po_number')
+        .eq('item_id', itemId).is('voided_at', null).gt('remaining_qty', 0).order('created_at', { ascending: true })
+    ),
+
   /* ---------- stock out ---------- */
   recordStockOut: (payload) => unwrap(supabase.rpc('record_stock_out', payload)).then((rows) => rows[0]),
 

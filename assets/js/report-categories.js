@@ -13,6 +13,11 @@ function norm(s) {
   return String(s || '').trim().toLowerCase();
 }
 
+/** true เมื่อวัตถุดิบอยู่ในหมวด "PC wire" — ใช้เปิดโหมดคีย์เลข Coil ตอนรับเข้า/เบิกออก */
+export function isPcWireCategory(category) {
+  return norm(category) === 'pc wire';
+}
+
 export function findCategorySection(category) {
   const c = norm(category);
   return CATEGORY_SECTIONS.find((s) => s.match.indexOf(c) > -1);
