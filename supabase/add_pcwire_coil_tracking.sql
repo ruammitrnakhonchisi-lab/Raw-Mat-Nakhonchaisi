@@ -1,7 +1,8 @@
 -- ==========================================================
 --  Migration: เพิ่มการติดตามระดับ Coil สำหรับวัตถุดิบหมวด "PC wire" เท่านั้น
 --  (รับเข้า = คีย์เลข Coil จากใบส่งของทีละม้วน, เบิกออก = เลือก Coil ตามแท็ก
---  เหล็กที่ติดมากับม้วนลวด แล้วตัดยอดเฉพาะม้วนนั้น)
+--  เหล็กที่ติดมากับม้วนลวด แล้วตัดยอดเฉพาะม้วนนั้น พร้อมระบุ "ใช้งาน" ว่า
+--  เบิกไปผลิตอะไร)
 --
 --  ไม่กระทบวัตถุดิบหมวดอื่น: ฟิลด์/เงื่อนไขใหม่ทั้งหมดเป็น optional (default
 --  เป็นค่าที่ทำให้พฤติกรรมเดิมเหมือนเดิมทุกประการเมื่อไม่ได้ระบุ)
@@ -22,6 +23,10 @@ alter table public.stock_in add constraint stock_in_remaining_qty_range check (r
 -- stock_out.coil_stock_in_id: อ้างอิงว่าเบิกออกครั้งนี้ตัดยอดมาจาก stock_in (coil) แถวไหน
 -- (null สำหรับการเบิกแบบปกติที่ไม่ได้เจาะจง coil — วัตถุดิบอื่นทั้งหมดยังเป็น null เหมือนเดิม)
 alter table public.stock_out add column if not exists coil_stock_in_id bigint references public.stock_in (id);
+
+-- stock_out.usage_type: "ใช้งาน" — เบิก coil นี้ไปผลิตอะไร (เช่น เสาเล็ก/เสาใหญ่/แผ่นพื้น/i30/i15)
+-- ปัจจุบันคีย์เฉพาะตอนเบิก PC wire เท่านั้น วัตถุดิบอื่นเป็นค่าว่าง '' เหมือนเดิม
+alter table public.stock_out add column if not exists usage_type text not null default '';
 
 create index if not exists idx_stock_in_available_coil
   on public.stock_in (item_id, remaining_qty)
@@ -140,7 +145,8 @@ create or replace function public.record_stock_out(
   p_requested_by text default '',
   p_approved_by text default '',
   p_note text default '',
-  p_coil_stock_in_id bigint default null
+  p_coil_stock_in_id bigint default null,
+  p_usage_type text default ''
 ) returns table (stock_out_id bigint, new_qty numeric)
 language plpgsql
 security definer
@@ -188,14 +194,18 @@ begin
   v_new_qty := v_item.qty_on_hand - p_qty;
   select coalesce(nullif(p_requested_by, ''), display_name) into v_requested_by
     from public.profiles where id = auth.uid();
-  v_note := case when v_coil_no <> '' then trim('[Coil: ' || v_coil_no || '] ' || p_note) else p_note end;
+  v_note := trim(
+    (case when v_coil_no <> '' then '[Coil: ' || v_coil_no || '] ' else '' end) ||
+    (case when coalesce(p_usage_type, '') <> '' then '[ใช้งาน: ' || p_usage_type || '] ' else '' end) ||
+    p_note
+  );
 
   insert into public.stock_out (
     txn_date, item_id, sku, item_name, qty, department, job_order_no,
-    requested_by, approved_by, recorded_by, note, coil_stock_in_id
+    requested_by, approved_by, recorded_by, note, coil_stock_in_id, usage_type
   ) values (
     v_txn_date, v_item.id, v_item.sku, v_item.name, p_qty, p_department, p_job_order_no,
-    coalesce(v_requested_by, ''), p_approved_by, auth.uid(), v_note, p_coil_stock_in_id
+    coalesce(v_requested_by, ''), p_approved_by, auth.uid(), v_note, p_coil_stock_in_id, coalesce(p_usage_type, '')
   ) returning id into v_id;
 
   update public.items set qty_on_hand = v_new_qty, updated_at = now() where id = v_item.id;

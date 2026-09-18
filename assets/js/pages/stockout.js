@@ -25,6 +25,9 @@ export async function renderStockOut(content) {
       '<select id="so_coil"><option value="">-เลือก Coil-</option></select></div>' +
       '<div class="form-field so-coil-only" style="display:none;"><label>จำนวนที่เบิกจาก Coil นี้</label>' +
       '<input type="number" step="any" id="f_so_coil_qty"></div>' +
+      '<div class="form-field so-coil-only" style="display:none;"><label>ใช้งาน (เบิกไปผลิตอะไร)</label>' +
+      '<input type="text" id="f_so_usage" list="so_usage_list" placeholder="เช่น เสาเล็ก, เสาใหญ่, แผ่นพื้น">' +
+      '<datalist id="so_usage_list"></datalist></div>' +
       field('หน่วยงาน/แผนกที่เบิก', 'so_dept', '') +
       field('เลขที่ใบสั่งผลิต (Job/WO)', 'so_job', '') +
       field('ผู้เบิก', 'so_by', (AUTH.profile && AUTH.profile.display_name) || '') +
@@ -35,6 +38,10 @@ export async function renderStockOut(content) {
       '</div>';
 
     let availableCoils = [];
+
+    api.getUsageTypeSuggestions().then((list) => {
+      document.getElementById('so_usage_list').innerHTML = list.map((v) => '<option value="' + esc(v) + '"></option>').join('');
+    }).catch(() => {});
 
     function setStockOutMode(isPcWire) {
       document.querySelectorAll('.so-normal-only').forEach((el) => { el.style.display = isPcWire ? 'none' : 'block'; });
@@ -106,7 +113,9 @@ export async function renderStockOut(content) {
             btn.disabled = false;
             return;
           }
-          payload = { ...common, p_qty: qty, p_coil_stock_in_id: Number(coilId) };
+          const usageType = val('so_usage').trim();
+          if (!usageType) { toast('กรุณาระบุ "ใช้งาน" ว่าเบิกไปผลิตอะไร', 'error'); btn.disabled = false; return; }
+          payload = { ...common, p_qty: qty, p_coil_stock_in_id: Number(coilId), p_usage_type: usageType };
         } else {
           qty = Number(val('so_qty'));
           if (!qty || qty <= 0) { toast('กรุณาระบุจำนวนเบิกให้ถูกต้อง', 'error'); btn.disabled = false; return; }

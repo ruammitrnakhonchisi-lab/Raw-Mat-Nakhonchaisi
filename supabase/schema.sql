@@ -70,6 +70,7 @@ create table if not exists public.stock_out (
   item_name text not null,
   qty numeric not null check (qty > 0),
   coil_stock_in_id bigint references public.stock_in (id),
+  usage_type text not null default '',
   department text not null default '',
   job_order_no text not null default '',
   requested_by text not null default '',
