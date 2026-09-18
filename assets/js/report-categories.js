@@ -19,12 +19,8 @@ export function isPcWireCategory(category) {
   return String(category || '').replace(/\s+/g, '').toLowerCase() === 'pcwire';
 }
 
-/** ตัวเลือก "ใช้งาน" (เบิก PC wire ไปผลิตอะไร) — เป็น dropdown ปิดตายเพื่อกันพิมพ์ผิด/สะกดไม่ตรงกัน
- *  รวบรวมจากค่าที่พนักงานเคยใช้จริงในไฟล์ Excel เดิม (มี "อื่นๆ" ไว้เผื่อกรณีที่ไม่อยู่ในลิสต์) */
-export const PCWIRE_USAGE_TYPES = [
-  'i15', 'i18', 'i22', 'i22 มอก', 'i26', 'i29', 'i30', 'i31',
-  'W (เสาเข็ม W)', 'ไอเล็ก', 'ไอใหญ่', 'เสาเล็ก', 'เสาใหญ่', 'แผ่น', 'แผ่นพื้น',
-];
+/** ตัวเลือก "ใช้งาน" (เบิก PC wire ไปผลิตอะไร) — เป็น dropdown ปิดตายเพื่อกันพิมพ์ผิด/สะกดไม่ตรงกัน */
+export const PCWIRE_USAGE_TYPES = ['เสาเล็ก', 'เสาใหญ่', 'แผ่นพื้น'];
 
 export function findCategorySection(category) {
   const c = norm(category);
