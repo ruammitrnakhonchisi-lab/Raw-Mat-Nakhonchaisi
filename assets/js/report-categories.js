@@ -13,9 +13,10 @@ function norm(s) {
   return String(s || '').trim().toLowerCase();
 }
 
-/** true เมื่อวัตถุดิบอยู่ในหมวด "PC wire" — ใช้เปิดโหมดคีย์เลข Coil ตอนรับเข้า/เบิกออก */
+/** true เมื่อวัตถุดิบอยู่ในหมวด "PC wire" — ใช้เปิดโหมดคีย์เลข Coil ตอนรับเข้า/เบิกออก
+ *  เทียบแบบตัดช่องว่างทั้งหมดออกก่อน กันพลาดกรณีพิมพ์ "PC wire", "PCwire", "Pc  Wire" ปนกัน */
 export function isPcWireCategory(category) {
-  return norm(category) === 'pc wire';
+  return String(category || '').replace(/\s+/g, '').toLowerCase() === 'pcwire';
 }
 
 export function findCategorySection(category) {
