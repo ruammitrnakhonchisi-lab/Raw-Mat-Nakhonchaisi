@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { STATE as AUTH } from '../auth.js';
 import { STATE } from '../app.js';
-import { isPcWireCategory } from '../report-categories.js';
+import { isPcWireCategory, PCWIRE_USAGE_TYPES } from '../report-categories.js';
 import { esc, fmtNum, field, val, todayISO, toast, showErr, showSuccessPopup } from '../ui.js';
 
 export async function renderStockOut(content) {
@@ -21,13 +21,14 @@ export async function renderStockOut(content) {
       '<div class="form-field"><label>คงเหลือปัจจุบัน</label><input type="text" id="so_avail" readonly value=""></div>' +
       field('วันที่เบิก', 'so_date', todayISO(), false, 'date') +
       '<div class="form-field so-normal-only"><label>จำนวนเบิก</label><input type="number" id="f_so_qty" required></div>' +
-      '<div class="form-field so-coil-only" style="display:none;"><label>เลือก Coil (อ่านเลขจากแท็กที่ติดมากับม้วนลวด)</label>' +
+      '<div class="form-field so-coil-only" style="display:none;"><label>เลือก Coil (อ่านเลขจากแท็กที่ติดมากับม้วนลวด — เบิกทีละ 1 ขด)</label>' +
       '<select id="so_coil"><option value="">-เลือก Coil-</option></select></div>' +
-      '<div class="form-field so-coil-only" style="display:none;"><label>จำนวนที่เบิกจาก Coil นี้</label>' +
-      '<input type="number" step="any" id="f_so_coil_qty"></div>' +
       '<div class="form-field so-coil-only" style="display:none;"><label>ใช้งาน (เบิกไปผลิตอะไร)</label>' +
-      '<input type="text" id="f_so_usage" list="so_usage_list" placeholder="เช่น เสาเล็ก, เสาใหญ่, แผ่นพื้น">' +
-      '<datalist id="so_usage_list"></datalist></div>' +
+      '<select id="f_so_usage"><option value="">-เลือกใช้งาน-</option>' +
+      PCWIRE_USAGE_TYPES.map((u) => '<option value="' + esc(u) + '">' + esc(u) + '</option>').join('') +
+      '<option value="__OTHER__">อื่นๆ (ระบุเอง)</option></select></div>' +
+      '<div class="form-field" id="so_usage_other_field" style="display:none;"><label>ระบุใช้งาน</label>' +
+      '<input type="text" id="f_so_usage_other" placeholder="พิมพ์ระบุเอง"></div>' +
       field('หน่วยงาน/แผนกที่เบิก', 'so_dept', '') +
       field('เลขที่ใบสั่งผลิต (Job/WO)', 'so_job', '') +
       field('ผู้เบิก', 'so_by', (AUTH.profile && AUTH.profile.display_name) || '') +
@@ -37,30 +38,21 @@ export async function renderStockOut(content) {
       '<div class="form-actions"><button class="btn btn-danger" id="submitStockOut">📤 บันทึกเบิกออก</button></div>' +
       '</div>';
 
-    let availableCoils = [];
-
-    api.getUsageTypeSuggestions().then((list) => {
-      document.getElementById('so_usage_list').innerHTML = list.map((v) => '<option value="' + esc(v) + '"></option>').join('');
-    }).catch(() => {});
-
     function setStockOutMode(isPcWire) {
       document.querySelectorAll('.so-normal-only').forEach((el) => { el.style.display = isPcWire ? 'none' : 'block'; });
       document.querySelectorAll('.so-coil-only').forEach((el) => { el.style.display = isPcWire ? 'block' : 'none'; });
+      if (!isPcWire) document.getElementById('so_usage_other_field').style.display = 'none';
     }
 
     async function loadCoilsForItem(itemId) {
       const select = document.getElementById('so_coil');
       select.innerHTML = '<option value="">กำลังโหลด...</option>';
-      document.getElementById('f_so_coil_qty').value = '';
       try {
-        availableCoils = await api.getAvailableCoils(itemId);
+        const coils = await api.getAvailableCoils(itemId);
         select.innerHTML = '<option value="">-เลือก Coil-</option>' +
-          availableCoils.map((c) =>
-            '<option value="' + c.id + '" data-remaining="' + c.remaining_qty + '">' +
-            'Coil ' + esc(c.lot_batch || '(ไม่มีเลข)') + ' — คงเหลือ ' + fmtNum(c.remaining_qty) + '</option>'
-          ).join('') || '<option value="">ไม่มี Coil คงเหลือ</option>';
+          coils.map((c) => '<option value="' + c.id + '">Coil ' + esc(c.lot_batch || '(ไม่มีเลข)') + '</option>').join('') ||
+          '<option value="">ไม่มี Coil คงเหลือ</option>';
       } catch (err) {
-        availableCoils = [];
         select.innerHTML = '<option value="">โหลด Coil ไม่สำเร็จ</option>';
         toast(err.message || String(err), 'error');
       }
@@ -74,9 +66,8 @@ export async function renderStockOut(content) {
       if (isPcWire) await loadCoilsForItem(Number(opt.dataset.id));
     });
 
-    document.getElementById('so_coil').addEventListener('change', function () {
-      const opt = this.options[this.selectedIndex];
-      document.getElementById('f_so_coil_qty').value = opt && opt.dataset.remaining ? opt.dataset.remaining : '';
+    document.getElementById('f_so_usage').addEventListener('change', function () {
+      document.getElementById('so_usage_other_field').style.display = this.value === '__OTHER__' ? 'block' : 'none';
     });
 
     document.getElementById('submitStockOut').addEventListener('click', async function (e) {
@@ -105,15 +96,10 @@ export async function renderStockOut(content) {
         if (isPcWire) {
           const coilId = val('so_coil');
           if (!coilId) { toast('กรุณาเลือก Coil ที่จะเบิก (อ่านเลขจากแท็กที่ติดมากับม้วน)', 'error'); btn.disabled = false; return; }
-          qty = Number(val('so_coil_qty'));
-          if (!qty || qty <= 0) { toast('กรุณาระบุจำนวนที่เบิกจาก Coil นี้ให้ถูกต้อง', 'error'); btn.disabled = false; return; }
-          const coil = availableCoils.find((c) => String(c.id) === String(coilId));
-          if (coil && qty > Number(coil.remaining_qty)) {
-            toast('จำนวนคงเหลือใน Coil นี้ไม่พอ (คงเหลือ ' + fmtNum(coil.remaining_qty) + ')', 'error');
-            btn.disabled = false;
-            return;
-          }
-          const usageType = val('so_usage').trim();
+          qty = 1;
+          const usageSel = val('so_usage');
+          if (!usageSel) { toast('กรุณาเลือก "ใช้งาน" ว่าเบิกไปผลิตอะไร', 'error'); btn.disabled = false; return; }
+          const usageType = usageSel === '__OTHER__' ? val('so_usage_other').trim() : usageSel;
           if (!usageType) { toast('กรุณาระบุ "ใช้งาน" ว่าเบิกไปผลิตอะไร', 'error'); btn.disabled = false; return; }
           payload = { ...common, p_qty: qty, p_coil_stock_in_id: Number(coilId), p_usage_type: usageType };
         } else {
@@ -125,7 +111,10 @@ export async function renderStockOut(content) {
         const res = await api.recordStockOut(payload);
         toast('บันทึกเบิกออกสำเร็จ', 'success');
         renderStockOut(content);
-        showSuccessPopup('เบิกออกสำเร็จ', [
+        showSuccessPopup('เบิกออกสำเร็จ', isPcWire ? [
+          'เบิกออก ' + itemName + ' 1 ขด',
+          'คงเหลือใหม่: ' + fmtNum(res.new_qty) + ' ขด',
+        ] : [
           'เบิกออก ' + itemName + ' จำนวน ' + fmtNum(qty) + ' หน่วย',
           'คงเหลือใหม่: ' + fmtNum(res.new_qty),
         ]);

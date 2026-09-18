@@ -19,8 +19,6 @@ function coilRowHtml() {
   return '<div class="coil-row" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;align-items:flex-end;">' +
     '<div class="form-field" style="flex:2;min-width:140px;margin:0;"><label>เลข Coil (จากแท็ก/ใบส่งของ)</label>' +
     '<input type="text" class="coil-no-input" placeholder="เลข Coil"></div>' +
-    '<div class="form-field" style="flex:1;min-width:100px;margin:0;"><label>น้ำหนัก/จำนวน</label>' +
-    '<input type="number" step="any" class="coil-qty-input" placeholder="0"></div>' +
     '<button type="button" class="btn btn-ghost btn-sm coil-row-remove" title="ลบแถวนี้">✕</button>' +
     '</div>';
 }
@@ -46,10 +44,10 @@ function drawStockInForm(content) {
     '<div class="form-field si-normal-only"><label>วันหมดอายุ</label><input type="date" id="f_si_exp"></div>' +
     '<div class="si-coil-only" style="display:none;grid-column:1/-1;">' +
     '<label style="display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:5px;">' +
-    'รายการ Coil (คีย์เลข Coil จากใบส่งของ + น้ำหนักที่รับเข้าจริงของแต่ละม้วน)</label>' +
+    'รายการ Coil (คีย์เลข Coil จากใบส่งของทีละม้วน — นับเป็น 1 ขด ต่อ 1 Coil)</label>' +
     '<div id="si_coil_rows"></div>' +
     '<button type="button" class="btn btn-ghost btn-sm" id="si_addCoilRow">+ เพิ่ม Coil</button>' +
-    '<div style="margin-top:8px;font-size:13px;color:var(--muted);">รวมทั้งหมด: <b id="si_coil_total">0</b></div>' +
+    '<div style="margin-top:8px;font-size:13px;color:var(--muted);">รวมทั้งหมด: <b id="si_coil_total">0</b> ขด</div>' +
     '</div>' +
     field('ราคาต่อหน่วย (บาท)', 'si_price', '', false, 'number') +
     field('ผู้จำหน่าย', 'si_supplier', '') +
@@ -64,8 +62,7 @@ function drawStockInForm(content) {
   const coilRows = document.getElementById('si_coil_rows');
 
   function recalcCoilTotal() {
-    let total = 0;
-    coilRows.querySelectorAll('.coil-qty-input').forEach((inp) => { total += Number(inp.value) || 0; });
+    const total = Array.from(coilRows.querySelectorAll('.coil-no-input')).filter((inp) => inp.value.trim()).length;
     document.getElementById('si_coil_total').textContent = fmtNum(total);
   }
 
@@ -84,7 +81,7 @@ function drawStockInForm(content) {
     }
   });
   coilRows.addEventListener('input', function (e) {
-    if (e.target.classList.contains('coil-qty-input')) recalcCoilTotal();
+    if (e.target.classList.contains('coil-no-input')) recalcCoilTotal();
   });
   document.getElementById('si_addCoilRow').addEventListener('click', addCoilRow);
 
@@ -130,28 +127,22 @@ function drawStockInForm(content) {
     btn.disabled = true;
     try {
       if (isPcWire) {
-        const rows = Array.from(coilRows.querySelectorAll('.coil-row')).map((row) => ({
-          coilNo: row.querySelector('.coil-no-input').value.trim(),
-          qty: Number(row.querySelector('.coil-qty-input').value),
-        }));
-        const filled = rows.filter((r) => r.coilNo || r.qty > 0);
-        const valid = filled.filter((r) => r.coilNo && r.qty > 0);
-        if (!filled.length) { toast('กรุณาระบุเลข Coil และน้ำหนักอย่างน้อย 1 ม้วน', 'error'); btn.disabled = false; return; }
-        if (valid.length !== filled.length) { toast('กรุณาระบุเลข Coil และน้ำหนักให้ครบทุกแถว หรือลบแถวที่ไม่ใช้ออก', 'error'); btn.disabled = false; return; }
+        const coilNos = Array.from(coilRows.querySelectorAll('.coil-no-input'))
+          .map((inp) => inp.value.trim())
+          .filter((v) => v);
+        if (!coilNos.length) { toast('กรุณาระบุเลข Coil อย่างน้อย 1 ม้วน', 'error'); btn.disabled = false; return; }
 
         let newQty = 0;
-        let totalQty = 0;
-        for (const row of valid) {
-          const res = await api.recordStockIn({ ...common, p_qty: row.qty, p_lot_batch: row.coilNo });
+        for (const coilNo of coilNos) {
+          const res = await api.recordStockIn({ ...common, p_qty: 1, p_lot_batch: coilNo });
           newQty = res.new_qty;
-          totalQty += row.qty;
         }
         toast('บันทึกรับเข้าสำเร็จ', 'success');
         renderStockIn(content);
         showSuccessPopup('รับเข้าสำเร็จ', [
-          'รับเข้า ' + itemName + ' ' + valid.length + ' coil รวม ' + fmtNum(totalQty) + ' หน่วย',
-          'เลข Coil: ' + valid.map((r) => r.coilNo).join(', '),
-          'คงเหลือใหม่: ' + fmtNum(newQty),
+          'รับเข้า ' + itemName + ' ' + coilNos.length + ' ขด',
+          'เลข Coil: ' + coilNos.join(', '),
+          'คงเหลือใหม่: ' + fmtNum(newQty) + ' ขด',
         ]);
       } else {
         const qty = Number(val('si_qty'));

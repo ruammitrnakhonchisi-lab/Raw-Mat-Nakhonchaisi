@@ -50,12 +50,6 @@ export const api = {
         .eq('item_id', itemId).is('voided_at', null).gt('remaining_qty', 0).order('created_at', { ascending: true })
     ),
 
-  /** ค่า "ใช้งาน" ที่เคยพิมพ์ไว้ (ไม่ซ้ำ) — ใช้ทำ autocomplete ตอนเบิก PC wire */
-  getUsageTypeSuggestions: () =>
-    unwrap(
-      supabase.from('stock_out').select('usage_type').neq('usage_type', '').order('created_at', { ascending: false }).limit(300)
-    ).then((rows) => Array.from(new Set(rows.map((r) => r.usage_type))).slice(0, 30)),
-
   /* ---------- stock out ---------- */
   recordStockOut: (payload) => unwrap(supabase.rpc('record_stock_out', payload)).then((rows) => rows[0]),
 
