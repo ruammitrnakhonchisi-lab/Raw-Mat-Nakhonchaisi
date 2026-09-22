@@ -21,6 +21,8 @@ export async function renderStockOut(content) {
       '<div class="form-field"><label>คงเหลือปัจจุบัน</label><input type="text" id="so_avail" readonly value=""></div>' +
       field('วันที่เบิก', 'so_date', todayISO(), false, 'date') +
       '<div class="form-field so-normal-only"><label>จำนวนเบิก</label><input type="number" id="f_so_qty" required></div>' +
+      '<div class="form-field so-coil-only" style="display:none;"><label>ค้นหาเลข Coil</label>' +
+      '<input type="text" id="f_so_coil_search" placeholder="พิมพ์เพื่อค้นหาเลข Coil..."></div>' +
       '<div class="form-field so-coil-only" style="display:none;"><label>เลือก Coil (อ่านเลขจากแท็กที่ติดมากับม้วนลวด — เบิกทีละ 1 ขด)</label>' +
       '<select id="so_coil"><option value="">-เลือก Coil-</option></select></div>' +
       '<div class="form-field so-coil-only" style="display:none;"><label>ใช้งาน (เบิกไปผลิตอะไร)</label>' +
@@ -41,15 +43,29 @@ export async function renderStockOut(content) {
       document.querySelectorAll('.so-coil-only').forEach((el) => { el.style.display = isPcWire ? 'block' : 'none'; });
     }
 
+    let currentCoils = [];
+
+    function renderCoilOptions(filterText) {
+      const q = (filterText || '').trim().toLowerCase();
+      const filtered = q ? currentCoils.filter((c) => (c.lot_batch || '').toLowerCase().includes(q)) : currentCoils;
+      const select = document.getElementById('so_coil');
+      select.innerHTML = '<option value="">-เลือก Coil-</option>' + (
+        filtered.length
+          ? filtered.map((c) => '<option value="' + c.id + '">Coil ' + esc(c.lot_batch || '(ไม่มีเลข)') + '</option>').join('')
+          : '<option value="" disabled>ไม่พบ Coil ที่ค้นหา</option>'
+      );
+      if (filtered.length === 1) select.value = String(filtered[0].id);
+    }
+
     async function loadCoilsForItem(itemId) {
       const select = document.getElementById('so_coil');
       select.innerHTML = '<option value="">กำลังโหลด...</option>';
+      document.getElementById('f_so_coil_search').value = '';
       try {
-        const coils = await api.getAvailableCoils(itemId);
-        select.innerHTML = '<option value="">-เลือก Coil-</option>' +
-          coils.map((c) => '<option value="' + c.id + '">Coil ' + esc(c.lot_batch || '(ไม่มีเลข)') + '</option>').join('') ||
-          '<option value="">ไม่มี Coil คงเหลือ</option>';
+        currentCoils = await api.getAvailableCoils(itemId);
+        renderCoilOptions('');
       } catch (err) {
+        currentCoils = [];
         select.innerHTML = '<option value="">โหลด Coil ไม่สำเร็จ</option>';
         toast(err.message || String(err), 'error');
       }
@@ -61,6 +77,10 @@ export async function renderStockOut(content) {
       const isPcWire = !!opt.value && isPcWireCategory(opt.dataset.category);
       setStockOutMode(isPcWire);
       if (isPcWire) await loadCoilsForItem(Number(opt.dataset.id));
+    });
+
+    document.getElementById('f_so_coil_search').addEventListener('input', function () {
+      renderCoilOptions(this.value);
     });
 
     document.getElementById('submitStockOut').addEventListener('click', async function (e) {

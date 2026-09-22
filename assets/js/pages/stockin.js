@@ -15,14 +15,6 @@ export async function renderStockIn(content) {
   }
 }
 
-function coilRowHtml() {
-  return '<div class="coil-row" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;align-items:flex-end;">' +
-    '<div class="form-field" style="flex:2;min-width:140px;margin:0;"><label>เลข Coil (จากแท็ก/ใบส่งของ)</label>' +
-    '<input type="text" class="coil-no-input" placeholder="เลข Coil"></div>' +
-    '<button type="button" class="btn btn-ghost btn-sm coil-row-remove" title="ลบแถวนี้">✕</button>' +
-    '</div>';
-}
-
 function drawStockInForm(content) {
   const items = STATE.itemsCache || [];
   const options = items.map((it) =>
@@ -42,11 +34,9 @@ function drawStockInForm(content) {
     '<div class="form-field si-normal-only"><label>จำนวนรับเข้า</label><input type="number" id="f_si_qty"></div>' +
     '<div class="form-field si-normal-only"><label>Lot / Batch</label><input type="text" id="f_si_lot"></div>' +
     '<div class="form-field si-normal-only"><label>วันหมดอายุ</label><input type="date" id="f_si_exp"></div>' +
-    '<div class="si-coil-only" style="display:none;grid-column:1/-1;">' +
-    '<label style="display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:5px;">' +
-    'รายการ Coil (คีย์เลข Coil จากใบส่งของทีละม้วน — นับเป็น 1 ขด ต่อ 1 Coil)</label>' +
-    '<div id="si_coil_rows"></div>' +
-    '<button type="button" class="btn btn-ghost btn-sm" id="si_addCoilRow">+ เพิ่ม Coil</button>' +
+    '<div class="form-field si-coil-only" style="display:none;grid-column:1/-1;">' +
+    '<label>รายการ Coil (พิมพ์หรือวางเลข Coil จากใบส่งของ — บรรทัดละ 1 เลข = 1 ขด วางได้ทีเดียวหลายบรรทัด)</label>' +
+    '<textarea id="si_coil_list" rows="6" placeholder="C6616CC304\nC6616CC305\nC6616CC306"></textarea>' +
     '<div style="margin-top:8px;font-size:13px;color:var(--muted);">รวมทั้งหมด: <b id="si_coil_total">0</b> ขด</div>' +
     '</div>' +
     field('ราคาต่อหน่วย (บาท)', 'si_price', '', false, 'number') +
@@ -59,39 +49,21 @@ function drawStockInForm(content) {
     '<div class="section-title"><h3>📥 รับเข้าล่าสุด</h3></div>' +
     '<div id="si_recent"><div class="loading-spinner"><div class="spinner"></div></div></div>';
 
-  const coilRows = document.getElementById('si_coil_rows');
+  const coilList = document.getElementById('si_coil_list');
+
+  function parseCoilLines() {
+    return coilList.value.split(/\r?\n/).map((s) => s.trim()).filter((s) => s);
+  }
 
   function recalcCoilTotal() {
-    const total = Array.from(coilRows.querySelectorAll('.coil-no-input')).filter((inp) => inp.value.trim()).length;
-    document.getElementById('si_coil_total').textContent = fmtNum(total);
+    document.getElementById('si_coil_total').textContent = fmtNum(parseCoilLines().length);
   }
 
-  function addCoilRow() {
-    coilRows.insertAdjacentHTML('beforeend', coilRowHtml());
-  }
-
-  coilRows.addEventListener('click', function (e) {
-    if (e.target.classList.contains('coil-row-remove')) {
-      if (coilRows.querySelectorAll('.coil-row').length > 1) {
-        e.target.closest('.coil-row').remove();
-      } else {
-        e.target.closest('.coil-row').querySelectorAll('input').forEach((inp) => { inp.value = ''; });
-      }
-      recalcCoilTotal();
-    }
-  });
-  coilRows.addEventListener('input', function (e) {
-    if (e.target.classList.contains('coil-no-input')) recalcCoilTotal();
-  });
-  document.getElementById('si_addCoilRow').addEventListener('click', addCoilRow);
+  coilList.addEventListener('input', recalcCoilTotal);
 
   function setStockInMode(isPcWire) {
     document.querySelectorAll('.si-normal-only').forEach((el) => { el.style.display = isPcWire ? 'none' : 'block'; });
     document.querySelector('.si-coil-only').style.display = isPcWire ? 'block' : 'none';
-    if (isPcWire && !coilRows.querySelector('.coil-row')) {
-      addCoilRow();
-      recalcCoilTotal();
-    }
   }
 
   document.getElementById('si_sku').addEventListener('change', function () {
@@ -127,17 +99,17 @@ function drawStockInForm(content) {
     btn.disabled = true;
     try {
       if (isPcWire) {
-        const coilNos = Array.from(coilRows.querySelectorAll('.coil-no-input'))
-          .map((inp) => inp.value.trim())
-          .filter((v) => v);
-        if (!coilNos.length) { toast('กรุณาระบุเลข Coil อย่างน้อย 1 ม้วน', 'error'); btn.disabled = false; return; }
+        const rawCoilNos = parseCoilLines();
+        const coilNos = Array.from(new Set(rawCoilNos));
+        if (!coilNos.length) { toast('กรุณาพิมพ์หรือวางเลข Coil อย่างน้อย 1 ม้วน (บรรทัดละ 1 เลข)', 'error'); btn.disabled = false; return; }
+        const dupCount = rawCoilNos.length - coilNos.length;
 
         let newQty = 0;
         for (const coilNo of coilNos) {
           const res = await api.recordStockIn({ ...common, p_qty: 1, p_lot_batch: coilNo });
           newQty = res.new_qty;
         }
-        toast('บันทึกรับเข้าสำเร็จ', 'success');
+        toast('บันทึกรับเข้าสำเร็จ' + (dupCount ? ' (ตัดเลข Coil ที่ซ้ำกันในรายการออก ' + dupCount + ' รายการ)' : ''), 'success');
         renderStockIn(content);
         showSuccessPopup('รับเข้าสำเร็จ', [
           'รับเข้า ' + itemName + ' ' + coilNos.length + ' ขด',
