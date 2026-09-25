@@ -56,7 +56,7 @@ export async function renderLedger(content) {
           '<div><span class="lbl">คงเหลือ</span><span class="val">' + fmtNum(r.balance_after) + '</span></div>' +
           '<div><span class="lbl">ผู้บันทึก</span><span class="val">' + esc(r.recorded_by_name || '-') + '</span></div>' +
           '</div>' +
-          (r.note ? '<div class="item-card-loc">หมายเหตุ: ' + esc(r.note) + '</div>' : '') +
+          '<div class="item-card-loc">หมายเหตุ: ' + esc(r.note || '-') + '</div>' +
           '</div>';
       }).join('') || '<div class="empty-state">ไม่พบรายการ</div>';
 
