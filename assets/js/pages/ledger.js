@@ -40,29 +40,29 @@ export async function renderLedger(content) {
         const badge = TYPE_BADGE[r.txn_type] || 'badge-muted';
         const label = TYPE_LABEL[r.txn_type] || r.txn_type;
         return '<tr><td>' + esc(txnDateLabel(r)) + '</td><td><span class="badge ' + badge + '">' + label + '</span></td>' +
-          '<td>' + esc(r.sku) + '</td><td>' + esc(r.item_name) + '</td><td>' + fmtNum(r.delta) + '</td>' +
-          '<td>' + fmtNum(r.balance_after) + '</td><td>' + esc(r.ref) + '</td><td>' + esc(r.recorded_by_name) + '</td></tr>';
-      }).join('') || '<tr><td colspan="8" class="empty-state">ไม่พบรายการ</td></tr>';
+          '<td>' + esc(r.item_name) + '</td><td>' + fmtNum(r.delta) + '</td>' +
+          '<td>' + fmtNum(r.balance_after) + '</td><td>' + esc(r.note) + '</td><td>' + esc(r.recorded_by_name) + '</td></tr>';
+      }).join('') || '<tr><td colspan="7" class="empty-state">ไม่พบรายการ</td></tr>';
 
       const cards = rows.map((r) => {
         const badge = TYPE_BADGE[r.txn_type] || 'badge-muted';
         const label = TYPE_LABEL[r.txn_type] || r.txn_type;
         return '<div class="item-card">' +
           '<div class="item-card-top"><div><div class="item-card-name">' + esc(r.item_name) + '</div>' +
-          '<div class="item-card-meta">' + esc(r.sku) + ' • ' + esc(txnDateLabel(r)) + '</div></div>' +
+          '<div class="item-card-meta">' + esc(txnDateLabel(r)) + '</div></div>' +
           '<span class="badge ' + badge + '">' + label + '</span></div>' +
           '<div class="item-card-stats">' +
           '<div><span class="lbl">เปลี่ยนแปลง</span><span class="val">' + fmtNum(r.delta) + '</span></div>' +
           '<div><span class="lbl">คงเหลือ</span><span class="val">' + fmtNum(r.balance_after) + '</span></div>' +
           '<div><span class="lbl">ผู้บันทึก</span><span class="val">' + esc(r.recorded_by_name || '-') + '</span></div>' +
           '</div>' +
-          (r.ref ? '<div class="item-card-loc">อ้างอิง: ' + esc(r.ref) + '</div>' : '') +
+          (r.note ? '<div class="item-card-loc">หมายเหตุ: ' + esc(r.note) + '</div>' : '') +
           '</div>';
       }).join('') || '<div class="empty-state">ไม่พบรายการ</div>';
 
       document.getElementById('lg_table').innerHTML =
-        '<div class="table-wrap desktop-only"><table><thead><tr><th>วันที่</th><th>ประเภท</th><th>SKU</th><th>ชื่อวัตถุดิบ</th>' +
-        '<th>จำนวนเปลี่ยนแปลง</th><th>คงเหลือ</th><th>อ้างอิง</th><th>ผู้บันทึก</th></tr></thead><tbody>' + tbody + '</tbody></table></div>' +
+        '<div class="table-wrap desktop-only"><table><thead><tr><th>วันที่</th><th>ประเภท</th><th>ชื่อวัตถุดิบ</th>' +
+        '<th>จำนวนเปลี่ยนแปลง</th><th>คงเหลือ</th><th>หมายเหตุ</th><th>ผู้บันทึก</th></tr></thead><tbody>' + tbody + '</tbody></table></div>' +
         '<div class="item-card-list">' + cards + '</div>';
     } catch (err) {
       showErr(content)(err);
