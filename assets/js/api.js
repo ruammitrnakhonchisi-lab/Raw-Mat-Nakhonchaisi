@@ -87,6 +87,17 @@ export const api = {
   recordPcWireCountAdjustment: (payload) =>
     unwrap(supabase.rpc('record_pcwire_count_adjustment', payload)).then((rows) => rows[0]),
 
+  /* ---------- cement silos ---------- */
+  getCementSilos: () => unwrap(supabase.from('cement_silos').select('*').order('code')),
+
+  getCementDaily: () =>
+    unwrap(supabase.from('cement_daily').select('*').order('txn_date', { ascending: true }).limit(10000)),
+
+  saveCementDay: (payload) => unwrap(supabase.rpc('save_cement_day', payload)),
+
+  updateCementSilo: (code, fields) =>
+    unwrap(supabase.from('cement_silos').update(fields).eq('code', code).select().single()),
+
   /* ---------- ledger ---------- */
   getLedger: (filters) => {
     filters = filters || {};

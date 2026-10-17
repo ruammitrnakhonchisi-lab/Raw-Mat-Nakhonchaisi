@@ -7,6 +7,7 @@ import { renderStockIn } from './pages/stockin.js';
 import { renderStockOut } from './pages/stockout.js';
 import { renderAdjust } from './pages/adjust.js';
 import { renderPcWire } from './pages/pcwire.js';
+import { renderCement } from './pages/cement.js';
 import { renderLedger } from './pages/ledger.js';
 import { renderAlerts } from './pages/alerts.js';
 import { renderReports } from './pages/reports.js';
@@ -21,13 +22,13 @@ export const STATE = {
 
 const PAGE_TITLES = {
   dashboard: 'แดชบอร์ด', items: 'ข้อมูลวัตถุดิบ', stockin: 'รับเข้าวัตถุดิบ',
-  stockout: 'เบิกวัตถุดิบ', pcwire: 'สต๊อก PC wire', adjust: 'ปรับสต๊อค', ledger: 'ประวัติการเคลื่อนไหว',
+  stockout: 'เบิกวัตถุดิบ', pcwire: 'สต๊อก PC wire', cement: 'สต๊อกปูนซีเมนต์', adjust: 'ปรับสต๊อค', ledger: 'ประวัติการเคลื่อนไหว',
   alerts: 'แจ้งเตือน', reports: 'รายงาน', users: 'จัดการผู้ใช้งาน', settings: 'ตั้งค่าระบบ'
 };
 
 const RENDERERS = {
   dashboard: renderDashboard, items: renderItems, stockin: renderStockIn,
-  stockout: renderStockOut, pcwire: renderPcWire, adjust: renderAdjust, ledger: renderLedger,
+  stockout: renderStockOut, pcwire: renderPcWire, cement: renderCement, adjust: renderAdjust, ledger: renderLedger,
   alerts: renderAlerts, reports: renderReports, users: renderUsers, settings: renderSettings
 };
 

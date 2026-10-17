@@ -246,3 +246,29 @@ tr.subtotal-row td{background:#f7f9fc;font-weight:700;border-top:2px solid var(-
   .main{margin-left:0;}
   .hamburger{display:block;}
 }
+
+/* ---------- Cement silos ---------- */
+.silo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;}
+.silo-card{display:flex;gap:14px;align-items:center;}
+.silo3d{width:150px;flex:none;}
+.silo-info{flex:1;min-width:0;}
+.silo-title{font-weight:700;font-size:15px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.silo-qty{font-size:30px;font-weight:800;line-height:1.2;}
+.silo-qty small{font-size:13px;color:var(--muted);font-weight:600;}
+.silo-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-top:10px;}
+.silo-stats .lbl{display:block;font-size:11px;color:var(--muted);}
+.silo-stats .val{font-weight:700;font-size:13px;}
+.cm-row{display:grid;grid-template-columns:50px repeat(3,1fr) 1.4fr;gap:10px;align-items:end;margin-bottom:6px;}
+.cm-code{font-weight:800;font-size:18px;padding-bottom:8px;}
+.cm-table td,.cm-table th{text-align:right;}
+.cm-table td:first-child,.cm-table th:first-child{text-align:left;}
+.cm-table th[colspan]{text-align:center;border-left:1px solid var(--border);}
+.text-danger{color:var(--danger);font-weight:700;}
+.text-warn{color:#a8790c;font-weight:700;}
+.legend{display:flex;gap:14px;font-size:12px;margin-bottom:4px;}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;}
+@media (max-width:640px){
+  .silo-card{flex-direction:column;}
+  .cm-row{grid-template-columns:1fr 1fr;}
+  .cm-code{grid-column:1/-1;padding:0;}
+}
