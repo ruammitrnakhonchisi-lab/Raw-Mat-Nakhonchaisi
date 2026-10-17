@@ -1,6 +1,7 @@
 import { api } from '../api.js';
-import { STATE } from '../app.js';
+import { STATE, navigate } from '../app.js';
 import { STATE as AUTH } from '../auth.js';
+import { isPcWireCategory } from '../report-categories.js';
 import { esc, fmtNum, field, val, todayISO, toast, showErr } from '../ui.js';
 
 export async function renderAdjust(content) {
@@ -13,13 +14,15 @@ export async function renderAdjust(content) {
     STATE.itemsCache = items;
 
     const options = items.map((it) =>
-      '<option value="' + esc(it.sku) + '" data-qty="' + it.qty_on_hand + '" data-unit="' + esc(it.unit) + '">' +
+      '<option value="' + esc(it.sku) + '" data-qty="' + it.qty_on_hand + '" data-unit="' + esc(it.unit) + '" data-category="' + esc(it.category) + '">' +
       esc(it.name) + '</option>'
     ).join('');
 
     content.innerHTML =
       '<div class="card" style="max-width:720px;">' +
       '<p class="muted small">ใช้เมื่อยอดในระบบไม่ตรงกับยอดนับจริง (เช่น หลังตรวจนับสต๊อคประจำงวด)</p>' +
+      '<div class="alert alert-info" id="aj_pcwire_note" style="display:none;">วัตถุดิบหมวด PC wire ต้องปรับแบบรายเลข Coil ' +
+      '<button type="button" class="btn btn-primary btn-sm" id="aj_goto_pcwire">ไปหน้าสต๊อก PC wire</button></div>' +
       '<form id="adjustForm" class="form-grid">' +
       '<div class="form-field"><label>วัตถุดิบ</label><select id="aj_sku" required><option value="">-เลือกวัตถุดิบ-</option>' + options + '</select></div>' +
       '<div class="form-field"><label>จำนวนในระบบ (ก่อนปรับ)</label><input type="text" id="aj_before" readonly></div>' +
@@ -33,7 +36,12 @@ export async function renderAdjust(content) {
     document.getElementById('aj_sku').addEventListener('change', function () {
       const opt = this.options[this.selectedIndex];
       document.getElementById('aj_before').value = opt.dataset.qty ? fmtNum(opt.dataset.qty) + ' ' + opt.dataset.unit : '';
+      const isPcWire = !!opt.value && isPcWireCategory(opt.dataset.category);
+      document.getElementById('aj_pcwire_note').style.display = isPcWire ? 'block' : 'none';
+      document.getElementById('submitAdjust').disabled = isPcWire;
     });
+
+    document.getElementById('aj_goto_pcwire').addEventListener('click', () => navigate('pcwire'));
 
     document.getElementById('submitAdjust').addEventListener('click', async function (e) {
       e.preventDefault();

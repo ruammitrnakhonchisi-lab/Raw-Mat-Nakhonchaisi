@@ -50,6 +50,27 @@ export const api = {
         .eq('item_id', itemId).is('voided_at', null).gt('remaining_qty', 0).order('created_at', { ascending: true })
     ),
 
+  /** Coil ที่ยังอยู่ในสต๊อกของวัตถุดิบ PC wire หลาย SKU พร้อมกัน (หน้า "สต๊อก PC wire") */
+  getPcWireStock: (itemIds) =>
+    unwrap(
+      supabase.from('stock_in').select('id, item_id, lot_batch, remaining_qty, txn_date, po_number, created_at')
+        .in('item_id', itemIds).is('voided_at', null).gt('remaining_qty', 0).order('created_at', { ascending: true }).limit(5000)
+    ),
+
+  /** Coil ที่ถูกเบิกไปแล้วผ่านระบบ (ล่าสุดก่อน) พร้อมวันที่เบิกและ "ใช้งาน" */
+  getUsedCoils: (itemId, limit) =>
+    unwrap(
+      supabase.from('stock_out').select('txn_date, usage_type, stock_in!coil_stock_in_id(lot_batch, po_number)')
+        .eq('item_id', itemId).not('coil_stock_in_id', 'is', null)
+        .order('txn_date', { ascending: false }).order('created_at', { ascending: false }).limit(limit || 300)
+    ),
+
+  /** เลข Coil ที่ระบบบันทึกว่าใช้หมดแล้ว (ใช้เตือนตอนนับสต๊อกเจอเลขที่เคยเบิกไปแล้ว) */
+  getDepletedCoilNumbers: (itemId) =>
+    unwrap(
+      supabase.from('stock_in').select('lot_batch').eq('item_id', itemId).is('voided_at', null).eq('remaining_qty', 0).limit(5000)
+    ).then((rows) => rows.map((r) => r.lot_batch)),
+
   /* ---------- stock out ---------- */
   recordStockOut: (payload) => unwrap(supabase.rpc('record_stock_out', payload)).then((rows) => rows[0]),
 
@@ -62,6 +83,9 @@ export const api = {
 
   /* ---------- adjustments ---------- */
   recordAdjustment: (payload) => unwrap(supabase.rpc('record_adjustment', payload)).then((rows) => rows[0]),
+
+  recordPcWireCountAdjustment: (payload) =>
+    unwrap(supabase.rpc('record_pcwire_count_adjustment', payload)).then((rows) => rows[0]),
 
   /* ---------- ledger ---------- */
   getLedger: (filters) => {
