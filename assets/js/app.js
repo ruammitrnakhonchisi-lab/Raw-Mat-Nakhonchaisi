@@ -11,6 +11,7 @@ import { renderCement } from './pages/cement.js';
 import { renderLedger } from './pages/ledger.js';
 import { renderAlerts } from './pages/alerts.js';
 import { renderReports } from './pages/reports.js';
+import { renderPurchase } from './pages/purchase.js';
 import { renderUsers } from './pages/users.js';
 import { renderSettings } from './pages/settings.js';
 
@@ -23,13 +24,13 @@ export const STATE = {
 const PAGE_TITLES = {
   dashboard: 'แดชบอร์ด', items: 'ข้อมูลวัตถุดิบ', stockin: 'รับเข้าวัตถุดิบ',
   stockout: 'เบิกวัตถุดิบ', pcwire: 'สต๊อก PC wire', cement: 'สต๊อกปูนซีเมนต์', adjust: 'ปรับสต๊อค', ledger: 'ประวัติการเคลื่อนไหว',
-  alerts: 'แจ้งเตือน', reports: 'รายงาน', users: 'จัดการผู้ใช้งาน', settings: 'ตั้งค่าระบบ'
+  alerts: 'แจ้งเตือน', purchase: 'ใบขอซื้อวัตถุดิบ', reports: 'รายงาน', users: 'จัดการผู้ใช้งาน', settings: 'ตั้งค่าระบบ'
 };
 
 const RENDERERS = {
   dashboard: renderDashboard, items: renderItems, stockin: renderStockIn,
   stockout: renderStockOut, pcwire: renderPcWire, cement: renderCement, adjust: renderAdjust, ledger: renderLedger,
-  alerts: renderAlerts, reports: renderReports, users: renderUsers, settings: renderSettings
+  alerts: renderAlerts, purchase: renderPurchase, reports: renderReports, users: renderUsers, settings: renderSettings
 };
 
 export function navigate(page) {
