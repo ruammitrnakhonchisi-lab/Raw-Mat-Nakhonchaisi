@@ -275,19 +275,32 @@ tr.subtotal-row td{background:#f7f9fc;font-weight:700;border-top:2px solid var(-
 
 /* ---------- ใบขอเสนอซื้อ (พิมพ์ A4 แผ่นเดียว) ---------- */
 .pr-sheet{display:none;}
-.pr-page{width:190mm;height:275mm;margin:0 auto;color:#000;display:flex;flex-direction:column;overflow:hidden;}
-.pr-head{display:flex;align-items:center;gap:12px;margin-bottom:4mm;}
-.pr-head img{height:18mm;}
-.pr-co{font-weight:700;font-size:1.15em;flex:1;}
-.pr-title{font-weight:700;font-size:1.4em;border:1.5px solid #000;padding:2mm 6mm;}
-.pr-meta{display:flex;justify-content:space-between;gap:8mm;margin-bottom:2.5mm;}
-.pr-tbl{width:100%;border-collapse:collapse;margin-top:2mm;}
-.pr-tbl th,.pr-tbl td{border:1px solid #000;padding:0 2mm;line-height:1.2;}
-.pr-tbl th{text-align:center;font-weight:700;padding:1.5mm 2mm;}
+.pr-page{width:190mm;height:275mm;margin:0 auto;color:#111;display:flex;flex-direction:column;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+.pr-head{display:flex;align-items:center;gap:5mm;padding-bottom:3.5mm;margin-bottom:3.5mm;border-bottom:2.5px solid #1e3a8a;}
+.pr-head img{height:22mm;width:auto;}
+.pr-co{flex:1;display:flex;flex-direction:column;gap:1mm;}
+.pr-co b{font-size:1.2em;color:#1e3a8a;}
+.pr-co span{color:#444;font-size:.9em;}
+.pr-title{text-align:center;background:#1e3a8a;color:#fff;border-radius:2.5mm;padding:2.5mm 7mm;}
+.pr-title b{display:block;font-size:1.45em;}
+.pr-title span{display:block;font-size:.65em;letter-spacing:.18em;opacity:.85;}
+.pr-info{display:grid;grid-template-columns:1fr 1fr;gap:2mm 4mm;border:1px solid #cbd5e1;border-radius:2.5mm;padding:2.5mm 4mm;margin-bottom:3.5mm;background:#f8fafc;}
+.pr-info .wide{grid-column:1 / -1;}
+.pr-info label{display:inline-block;min-width:22mm;color:#1e3a8a;font-weight:700;}
+.pr-chk{display:inline-flex;align-items:center;gap:1.2mm;margin-right:4mm;}
+.pr-chk i{display:inline-block;width:3.6mm;height:3.6mm;border:1.2px solid #1e3a8a;border-radius:.8mm;font-style:normal;font-size:.8em;line-height:3.4mm;text-align:center;color:#fff;background:#fff;}
+.pr-chk.on i{background:#1e3a8a;}
+.pr-tbl{width:100%;border-collapse:collapse;border:1px solid #94a3b8;}
+.pr-tbl th,.pr-tbl td{border:1px solid #cbd5e1;padding:0 2mm;line-height:1.2;}
+.pr-tbl th{background:#e8eefc;color:#1e3a8a;text-align:center;font-weight:700;padding:1.8mm 2mm;border-color:#94a3b8;}
+.pr-tbl tbody tr:nth-child(even) td{background:#f8fafc;}
 .pr-tbl td.c{text-align:center;}
+.pr-stock{color:#334155;font-size:.9em;}
 .pr-note{margin-top:3mm;}
-.pr-end{margin:5mm 0 0 15mm;}
-.pr-sign{display:grid;grid-template-columns:repeat(4,1fr);gap:4mm;margin-top:auto;padding-top:10mm;text-align:center;}
-.pr-sign .line{margin-bottom:1mm;}
+.pr-end{margin:4mm 0 0 10mm;}
+.pr-sign{display:grid;grid-template-columns:repeat(4,1fr);gap:4mm;margin-top:auto;padding-top:8mm;text-align:center;font-size:.9em;}
+.pr-sign .sig{border-bottom:1px dotted #111;height:12mm;margin-bottom:1.5mm;}
+.pr-sign span{color:#444;}
+.pr-sign .dt{font-size:.85em;}
 @page{size:A4 portrait;margin:10mm;}
 @media print{.pr-sheet{display:block !important;}}

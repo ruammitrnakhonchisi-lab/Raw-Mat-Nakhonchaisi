@@ -153,30 +153,33 @@ export async function renderPurchase(content) {
         const r = rows[i];
         trs.push('<tr style="height:' + rowMm.toFixed(2) + 'mm"><td class="c">' + (r ? i + 1 : '') + '</td>' +
           '<td>' + (r ? esc(r.it.name) : '') + '</td><td class="c">' + (r ? fmtNum(r.qty) : '') + '</td>' +
-          '<td class="c">' + (r ? esc(r.it.unit) : '') + '</td><td></td></tr>');
+          '<td class="c">' + (r ? esc(r.it.unit) : '') + '</td>' +
+          '<td class="c pr-stock">' + (r ? 'คงเหลือ ' + fmtNum(r.it.qty_on_hand) + ' ' + esc(r.it.unit) : '') + '</td></tr>');
       }
       const note = document.getElementById('pr_note').value.trim();
       const signs = [['ผู้ขอเสนอซื้อ', '(ระดับหัวหน้าแผนก)'], ['ผู้ทวนสอบ(อนุมัติขั้นต้น)', '(ผู้จัดการโรงงาน)'],
         ['ผู้ดำเนินการ', '(แผนกจัดซื้อโรงงาน)'], ['ผู้อนุมัติ', '(กรรมการผู้จัดการ)']];
+      const chk = (on, label) => '<span class="pr-chk' + (on ? ' on' : '') + '"><i>' + (on ? '✓' : '') + '</i>' + label + '</span>';
       document.getElementById('pr_sheet').innerHTML =
         '<div class="pr-page" style="font-size:' + fs + 'px">' +
-        '<div class="pr-head"><img src="assets/img/logo.png" alt=""><div class="pr-co">' + esc(company) + '</div>' +
-        '<div class="pr-title">ใบขอเสนอซื้อ</div></div>' +
-        '<div class="pr-meta"><div>วันที่ ' + d.day + ' เดือน ' + d.month + ' พ.ศ. ' + d.year + '</div>' +
-        '<div>เลขที่ ' + esc(document.getElementById('pr_no').value) + '</div></div>' +
-        '<div class="pr-meta"><div>เรื่อง : ขออนุญาตเสนอซื้อ &nbsp; ' +
-        box(type === 'ทั่วไป') + ' ทั่วไป &nbsp; ' + box(type === 'อะไหล่เครื่องจักร') + ' อะไหล่เครื่องจักร &nbsp; ' +
-        box(type === 'วัสดุสิ้นเปลือง') + ' วัสดุสิ้นเปลือง &nbsp; ' + box(type === 'วัตถุดิบ') + ' วัตถุดิบ</div>' +
-        '<div>แผนก/ฝ่าย : ' + esc(document.getElementById('pr_dept').value) + '</div></div>' +
-        '<div class="pr-meta"><div>ระดับความเร่งด่วน &nbsp; ' + box(urg === '1') + ' ทันทีภายใน 1 วัน &nbsp; ' +
-        box(urg === '2') + ' ภายใน 2-3 วัน &nbsp; ' + box(urg === '3') + ' ภายใน 7-10 วัน</div></div>' +
+        '<div class="pr-head"><img src="assets/img/logo.png" alt="RMC">' +
+        '<div class="pr-co"><b>' + esc(company) + '</b><span>แผนก/ฝ่าย : ' + esc(document.getElementById('pr_dept').value) + '</span></div>' +
+        '<div class="pr-title"><b>ใบขอเสนอซื้อ</b><span>PURCHASE REQUEST</span></div></div>' +
+        '<div class="pr-info">' +
+        '<div><label>วันที่</label>' + d.day + ' ' + d.month + ' ' + d.year + '</div>' +
+        '<div><label>เลขที่</label>' + esc(document.getElementById('pr_no').value) + '</div>' +
+        '<div class="wide"><label>เรื่อง</label>ขออนุญาตเสนอซื้อ &nbsp;&nbsp; ' +
+        chk(type === 'ทั่วไป', 'ทั่วไป') + chk(type === 'อะไหล่เครื่องจักร', 'อะไหล่เครื่องจักร') +
+        chk(type === 'วัสดุสิ้นเปลือง', 'วัสดุสิ้นเปลือง') + chk(type === 'วัตถุดิบ', 'วัตถุดิบ') + '</div>' +
+        '<div class="wide"><label>ความเร่งด่วน</label>' +
+        chk(urg === '1', 'ทันทีภายใน 1 วัน') + chk(urg === '2', 'ภายใน 2-3 วัน') + chk(urg === '3', 'ภายใน 7-10 วัน') + '</div></div>' +
         '<table class="pr-tbl"><thead><tr><th style="width:9%">ลำดับ</th><th>รายการเสนอซื้อ</th>' +
-        '<th style="width:14%">จำนวน</th><th style="width:12%">หน่วย</th><th style="width:25%">วัตถุประสงค์การใช้</th></tr></thead><tbody>' +
+        '<th style="width:14%">จำนวน</th><th style="width:11%">หน่วย</th><th style="width:27%">วัตถุประสงค์การใช้</th></tr></thead><tbody>' +
         trs.join('') + '</tbody></table>' +
-        (note ? '<div class="pr-note">หมายเหตุ : ' + esc(note) + '</div>' : '') +
+        (note ? '<div class="pr-note"><b>หมายเหตุ :</b> ' + esc(note) + '</div>' : '') +
         '<div class="pr-end">จึงเรียนมาเพื่อพิจารณาขออนุมัติ</div>' +
         '<div class="pr-sign">' + signs.map((p) =>
-          '<div><div class="line">....................................</div>' + p[0] + '<br>' + p[1] + '</div>').join('') +
+          '<div><div class="sig"></div><b>' + p[0] + '</b><br><span>' + p[1] + '</span><br><span class="dt">วันที่ ......../......../........</span></div>').join('') +
         '</div></div>';
     }
 
