@@ -101,6 +101,7 @@ function editItem(id, content) {
     field('หน่วยนับ (เช่น กก., ลิตร, ชิ้น)', 'unit', it ? it.unit : '') +
     field('จุดสั่งซื้อขั้นต่ำ', 'min', it ? it.reorder_point : '0', false, 'number') +
     field('สต๊อคสูงสุด', 'max', it ? it.max_stock : '0', false, 'number') +
+    field('สั่งล่วงหน้า (วัน)', 'lead', it ? it.lead_time_days : '0', false, 'number') +
     field('ราคาต่อหน่วย (บาท)', 'price', it ? it.unit_price : '0', false, 'number') +
     field('ผู้จำหน่ายหลัก', 'supplier', it ? it.primary_supplier : '') +
     field('ที่จัดเก็บ (โซน/ชั้นวาง)', 'loc', it ? it.storage_location : '') +
@@ -128,6 +129,7 @@ function editItem(id, content) {
         unit: document.getElementById('f_unit').value.trim(),
         reorder_point: Number(document.getElementById('f_min').value) || 0,
         max_stock: Number(document.getElementById('f_max').value) || 0,
+        lead_time_days: Math.max(0, parseInt(document.getElementById('f_lead').value, 10) || 0),
         unit_price: Number(document.getElementById('f_price').value) || 0,
         primary_supplier: document.getElementById('f_supplier').value.trim(),
         storage_location: document.getElementById('f_loc').value.trim(),

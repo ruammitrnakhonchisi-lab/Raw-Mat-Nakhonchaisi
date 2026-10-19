@@ -81,6 +81,38 @@ export const api = {
     return unwrap(q);
   },
 
+  /* ---------- purchase requests ---------- */
+  getPurchaseRequests: (status) => {
+    let q = supabase.from('purchase_requests')
+      .select('*, purchase_request_lines(id, item_id, qty, received_qty, items(sku, name, unit))')
+      .order('id', { ascending: false });
+    if (status) q = q.eq('status', status);
+    return unwrap(q);
+  },
+
+  getOpenPurchaseLines: () =>
+    unwrap(supabase.from('purchase_request_lines')
+      .select('item_id, qty, received_qty, purchase_requests!inner(status)')
+      .eq('purchase_requests.status', 'open')),
+
+  createPurchaseRequest: async (note, lines) => {
+    const pr = await unwrap(supabase.from('purchase_requests').insert({ note }).select().single());
+    try {
+      await unwrap(supabase.from('purchase_request_lines')
+        .insert(lines.map((l) => ({ pr_id: pr.id, item_id: l.item_id, qty: l.qty }))));
+    } catch (err) {
+      await supabase.from('purchase_requests').delete().eq('id', pr.id);
+      throw err;
+    }
+    return pr;
+  },
+
+  updatePurchaseLineReceived: (id, receivedQty) =>
+    unwrap(supabase.from('purchase_request_lines').update({ received_qty: receivedQty }).eq('id', id)),
+
+  setPurchaseRequestStatus: (id, status) =>
+    unwrap(supabase.from('purchase_requests').update({ status }).eq('id', id)),
+
   /* ---------- adjustments ---------- */
   recordAdjustment: (payload) => unwrap(supabase.rpc('record_adjustment', payload)).then((rows) => rows[0]),
 
