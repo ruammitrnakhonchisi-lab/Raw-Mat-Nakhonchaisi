@@ -1,36 +1,63 @@
 import { api } from '../api.js';
 import { esc, fmtNum, todayISO, showErr, toast } from '../ui.js';
 
+const TH_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+const MIN_ROWS = 14; // จำนวนบรรทัดในฟอร์มกระดาษ (ตามไฟล์ Excel)
+const DEFAULT_COMPANY = 'บริษัท ร่วมมิตรคอนกรีต (บ่อตะกั่ว) จำกัด';
+
 function isoMonthsAgo(n) {
   const d = new Date();
   d.setMonth(d.getMonth() - n);
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
+function thaiDateParts() {
+  const d = new Date();
+  return { day: d.getDate(), month: TH_MONTHS[d.getMonth()], year: d.getFullYear() + 543 };
+}
+
+function defaultDocNo() {
+  const d = new Date();
+  return String((d.getFullYear() + 543) % 100).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + '-';
+}
+
 export async function renderPurchase(content) {
   try {
     const [items, settings] = await Promise.all([api.getItems(), api.getSettings()]);
     const active = items.filter((it) => it.status !== 'inactive');
-    let months = 3;
+    const months = 3; // ใช้เฉลี่ย/เดือน คิดจากเบิกย้อนหลัง 3 เดือน
     let onlyLow = true;
-    let usage = {}; // item_id -> ปริมาณเบิกรวมในช่วงที่เลือก
-    let pending = {}; // item_id -> ค้างส่ง (สั่งแล้วยังไม่รับ) จากใบที่ยังเปิด
+    let search = '';
+    let usage = {}; // item_id -> ปริมาณเบิกรวม 3 เดือน
+    let pending = {}; // item_id -> ค้างส่ง
     let dbReady = true;
-    const picked = {}; // item_id -> { on, qty }
+    const qtyOf = {}; // item_id -> จำนวนสั่งซื้อ (string จาก input)
+    const company = (settings.CompanyName && settings.CompanyName !== 'บริษัทของฉัน จำกัด') ? settings.CompanyName : DEFAULT_COMPANY;
 
     content.innerHTML =
-      '<div class="print-header"><h2>' + esc(settings.CompanyName || 'Stock Pro') + '</h2>' +
-      '<div>ใบขอซื้อวัตถุดิบ — วันที่ ' + esc(todayISO()) + '</div></div>' +
       '<div class="toolbar no-print">' +
-      '<label>คำนวณใช้เฉลี่ยจากย้อนหลัง <select id="pr_months">' +
-      '<option value="1">1 เดือน</option><option value="3" selected>3 เดือน</option>' +
-      '<option value="6">6 เดือน</option><option value="12">12 เดือน</option></select></label>' +
+      '<input type="search" id="pr_search" placeholder="🔍 ค้นหารายการ (ชื่อ / SKU)" style="flex:1;min-width:200px">' +
       '<label><input type="checkbox" id="pr_low" checked> เฉพาะต่ำกว่าจุดสั่งซื้อ</label>' +
-      '<div class="spacer"></div>' +
-      '<input type="text" id="pr_note" placeholder="หมายเหตุใบขอซื้อ" style="min-width:180px">' +
-      '<button class="btn btn-ghost" id="pr_save">💾 บันทึกใบขอซื้อ</button>' +
-      '<button class="btn btn-primary" id="pr_print">🖨️ พิมพ์ใบขอซื้อ</button></div>' +
-      '<div id="pr_body"></div><div id="pr_open" class="no-print"></div>';
+      '<button class="btn btn-ghost" id="pr_fill">✨ เติมจำนวนที่แนะนำ</button>' +
+      '<button class="btn btn-ghost" id="pr_clear">ล้าง</button></div>' +
+      '<div id="pr_body" class="no-print"></div>' +
+      '<div class="toolbar no-print" style="position:sticky;bottom:0;background:var(--bg,#fff);padding:10px 0;border-top:1px solid var(--border)">' +
+      '<b id="pr_count">เลือก 0 รายการ</b><div class="spacer"></div>' +
+      '<button class="btn btn-ghost" id="pr_opts_btn">⚙️ ข้อมูลหัวใบ</button>' +
+      '<button class="btn btn-ghost" id="pr_print">🖨️ พิมพ์อย่างเดียว</button>' +
+      '<button class="btn btn-primary" id="pr_save_print">💾 บันทึก + พิมพ์</button></div>' +
+      '<div id="pr_opts" class="card no-print" style="display:none;margin-bottom:12px"><div class="form-grid">' +
+      '<div class="form-field"><label>เลขที่ใบขอซื้อ</label><input id="pr_no" value="' + esc(defaultDocNo()) + '"></div>' +
+      '<div class="form-field"><label>แผนก/ฝ่าย</label><input id="pr_dept" value="โรงงาน บ่อตะกั่ว"></div>' +
+      '<div class="form-field"><label>ประเภท</label><select id="pr_type"><option>วัตถุดิบ</option><option>ทั่วไป</option>' +
+      '<option>อะไหล่เครื่องจักร</option><option>วัสดุสิ้นเปลือง</option></select></div>' +
+      '<div class="form-field"><label>ความเร่งด่วน</label><select id="pr_urg"><option value="3">ภายใน 7-10 วัน</option>' +
+      '<option value="2">ภายใน 2-3 วัน</option><option value="1">ทันทีภายใน 1 วัน</option></select></div>' +
+      '<div class="form-field"><label>หมายเหตุ</label><input id="pr_note" placeholder="ไม่บังคับ"></div>' +
+      '</div></div>' +
+      '<div id="pr_open" class="no-print"></div>' +
+      '<div id="pr_sheet" class="pr-sheet"></div>';
 
     async function loadPending() {
       pending = {};
@@ -51,50 +78,113 @@ export async function renderPurchase(content) {
       rows.forEach((r) => { usage[r.item_id] = (usage[r.item_id] || 0) + Number(r.qty); });
     }
 
+    function suggested(it) {
+      const q = Number(it.qty_on_hand);
+      return Number(it.max_stock) > q ? Math.ceil(Number(it.max_stock) - q) : '';
+    }
+
+    function chosen() {
+      return active.filter((it) => Number(qtyOf[it.id]) > 0)
+        .map((it) => ({ it, qty: Number(qtyOf[it.id]) }));
+    }
+
+    function updateCount() {
+      document.getElementById('pr_count').textContent = 'เลือก ' + chosen().length + ' รายการ';
+    }
+
     function render() {
-      const list = active.filter((it) => !onlyLow || Number(it.qty_on_hand) <= Number(it.reorder_point));
+      const q = search.trim().toLowerCase();
+      const list = active.filter((it) => {
+        if (Number(qtyOf[it.id]) > 0) return true; // รายการที่เลือกไว้ต้องไม่หายไปจากหน้าจอ
+        if (onlyLow && !q && Number(it.qty_on_hand) > Number(it.reorder_point)) return false;
+        return !q || (it.name + ' ' + it.sku).toLowerCase().includes(q);
+      });
       const body = list.map((it) => {
         const qty = Number(it.qty_on_hand);
         const avg = (usage[it.id] || 0) / months;
         const days = avg > 0 ? Math.round((qty / avg) * 30) : null;
         const owed = pending[it.id] || 0;
         const low = qty <= Number(it.reorder_point);
-        let p = picked[it.id];
-        if (!p) {
-          const sug = Number(it.max_stock) > qty ? Math.ceil(Number(it.max_stock) - qty) : '';
-          p = picked[it.id] = { on: low, qty: sug };
-        }
         const daysBadge = days === null ? '-' :
           '<span class="badge ' + (days <= 15 ? 'badge-danger' : days <= 30 ? 'badge-warn' : 'badge-success') + '">' + days + ' วัน</span>';
-        return '<tr data-id="' + it.id + '" class="' + (p.on ? '' : 'no-print') + '">' +
-          '<td class="no-print"><input type="checkbox" class="pr_on" ' + (p.on ? 'checked' : '') + '></td>' +
-          '<td>' + esc(it.sku) + '</td><td>' + esc(it.name) + '</td>' +
+        return '<tr data-id="' + it.id + '"' + (Number(qtyOf[it.id]) > 0 ? ' style="background:#eef6ff"' : '') + '>' +
+          '<td><b>' + esc(it.name) + '</b>' + (low ? ' <span class="badge badge-danger">ต่ำกว่าขั้นต่ำ</span>' : '') +
+          '<div class="small muted">' + esc(it.sku) + '</div></td>' +
           '<td>' + fmtNum(qty) + ' ' + esc(it.unit) + '</td>' +
           '<td>' + fmtNum(it.reorder_point) + '</td>' +
           '<td>' + (Number(it.lead_time_days) ? it.lead_time_days + ' วัน' : '-') + '</td>' +
           '<td>' + (owed ? fmtNum(owed) : '-') + '</td>' +
           '<td>' + (avg > 0 ? fmtNum(avg) : '-') + '</td>' +
           '<td>' + daysBadge + '</td>' +
-          '<td><input type="number" class="pr_qty" min="0" step="any" style="width:90px" value="' + esc(p.qty) + '"></td>' +
-          '<td>' + esc(it.unit) + '</td><td>' + esc(it.primary_supplier) + '</td></tr>';
-      }).join('') || '<tr><td colspan="12" class="empty-state">ไม่มีรายการ</td></tr>';
+          '<td><input type="number" class="pr_qty" min="0" step="any" inputmode="decimal" style="width:100px" placeholder="จำนวน" value="' +
+          esc(qtyOf[it.id] === undefined ? '' : qtyOf[it.id]) + '"> ' + esc(it.unit) + '</td></tr>';
+      }).join('') || '<tr><td colspan="8" class="empty-state">ไม่พบรายการ — ลองเอาติ๊ก "เฉพาะต่ำกว่าจุดสั่งซื้อ" ออก หรือพิมพ์ค้นหา</td></tr>';
 
       document.getElementById('pr_body').innerHTML =
-        '<div class="table-wrap"><table><thead><tr><th class="no-print">เลือก</th><th>SKU</th><th>ชื่อ</th>' +
-        '<th>สต็อกคงเหลือ</th><th>ขั้นต่ำ</th><th>สั่งล่วงหน้า</th><th>ค้างส่ง</th><th>ใช้เฉลี่ย/เดือน</th><th>คิดเป็นกี่วัน</th>' +
-        '<th>จำนวนสั่งซื้อ</th><th>หน่วย</th><th>ผู้จำหน่าย</th></tr></thead><tbody>' + body + '</tbody></table></div>' +
-        '<div class="small muted">ใช้เฉลี่ย/เดือน = ยอดเบิกออกย้อนหลัง ' + months + ' เดือน ÷ ' + months +
-        ' · คิดเป็นกี่วัน = คงเหลือ ÷ ใช้เฉลี่ย/เดือน × 30 · ค้างส่ง = สั่งแล้วยังไม่รับ (จากใบขอซื้อที่ยังเปิด)</div>' +
-        (dbReady ? '' : '<div class="alert alert-error no-print">ยังไม่ได้สร้างตารางใบขอซื้อ — รัน supabase/add_purchase_requests.sql ใน Supabase ก่อน</div>');
+        '<div class="table-wrap"><table><thead><tr><th>รายการ</th><th>คงเหลือ</th><th>ขั้นต่ำ</th>' +
+        '<th>สั่งล่วงหน้า</th><th>ค้างส่ง</th><th>ใช้เฉลี่ย/เดือน</th><th>คิดเป็นกี่วัน</th>' +
+        '<th>จำนวนสั่งซื้อ</th></tr></thead><tbody>' + body + '</tbody></table></div>' +
+        '<div class="small muted">ใช้เฉลี่ย/เดือน = ยอดเบิกย้อนหลัง ' + months + ' เดือน ÷ ' + months +
+        ' · คิดเป็นกี่วัน = คงเหลือ ÷ ใช้เฉลี่ย/เดือน × 30 · ค้างส่ง = สั่งแล้วยังไม่รับ</div>' +
+        (dbReady ? '' : '<div class="alert alert-error">ยังไม่ได้สร้างตารางใบขอซื้อ — รัน supabase/add_purchase_requests.sql ใน Supabase ก่อน</div>');
 
       document.querySelectorAll('#pr_body tbody tr[data-id]').forEach((tr) => {
-        const id = tr.dataset.id;
-        tr.querySelector('.pr_on').addEventListener('change', (e) => {
-          picked[id].on = e.target.checked;
-          tr.classList.toggle('no-print', !e.target.checked);
+        tr.querySelector('.pr_qty').addEventListener('input', (e) => {
+          qtyOf[tr.dataset.id] = e.target.value;
+          tr.style.background = Number(e.target.value) > 0 ? '#eef6ff' : '';
+          updateCount();
         });
-        tr.querySelector('.pr_qty').addEventListener('input', (e) => { picked[id].qty = e.target.value; });
       });
+      updateCount();
+    }
+
+    function buildSheet() {
+      const rows = chosen();
+      const n = Math.max(MIN_ROWS, rows.length);
+      // ความสูงบรรทัดคำนวณให้พอดี A4 แผ่นเดียว (พื้นที่ตารางประมาณ 150 มม.)
+      const rowMm = Math.min(9.5, 150 / n);
+      const fs = rowMm >= 8 ? 14 : rowMm >= 6 ? 12 : rowMm >= 4.5 ? 10 : 8.5;
+      const d = thaiDateParts();
+      const type = document.getElementById('pr_type').value;
+      const urg = document.getElementById('pr_urg').value;
+      const box = (on) => (on ? '☒' : '☐');
+      const trs = [];
+      for (let i = 0; i < n; i++) {
+        const r = rows[i];
+        trs.push('<tr style="height:' + rowMm.toFixed(2) + 'mm"><td class="c">' + (r ? i + 1 : '') + '</td>' +
+          '<td>' + (r ? esc(r.it.name) : '') + '</td><td class="c">' + (r ? fmtNum(r.qty) : '') + '</td>' +
+          '<td class="c">' + (r ? esc(r.it.unit) : '') + '</td><td></td></tr>');
+      }
+      const note = document.getElementById('pr_note').value.trim();
+      const signs = [['ผู้ขอเสนอซื้อ', '(ระดับหัวหน้าแผนก)'], ['ผู้ทวนสอบ(อนุมัติขั้นต้น)', '(ผู้จัดการโรงงาน)'],
+        ['ผู้ดำเนินการ', '(แผนกจัดซื้อโรงงาน)'], ['ผู้อนุมัติ', '(กรรมการผู้จัดการ)']];
+      document.getElementById('pr_sheet').innerHTML =
+        '<div class="pr-page" style="font-size:' + fs + 'px">' +
+        '<div class="pr-head"><img src="assets/img/logo.png" alt=""><div class="pr-co">' + esc(company) + '</div>' +
+        '<div class="pr-title">ใบขอเสนอซื้อ</div></div>' +
+        '<div class="pr-meta"><div>วันที่ ' + d.day + ' เดือน ' + d.month + ' พ.ศ. ' + d.year + '</div>' +
+        '<div>เลขที่ ' + esc(document.getElementById('pr_no').value) + '</div></div>' +
+        '<div class="pr-meta"><div>เรื่อง : ขออนุญาตเสนอซื้อ &nbsp; ' +
+        box(type === 'ทั่วไป') + ' ทั่วไป &nbsp; ' + box(type === 'อะไหล่เครื่องจักร') + ' อะไหล่เครื่องจักร &nbsp; ' +
+        box(type === 'วัสดุสิ้นเปลือง') + ' วัสดุสิ้นเปลือง &nbsp; ' + box(type === 'วัตถุดิบ') + ' วัตถุดิบ</div>' +
+        '<div>แผนก/ฝ่าย : ' + esc(document.getElementById('pr_dept').value) + '</div></div>' +
+        '<div class="pr-meta"><div>ระดับความเร่งด่วน &nbsp; ' + box(urg === '1') + ' ทันทีภายใน 1 วัน &nbsp; ' +
+        box(urg === '2') + ' ภายใน 2-3 วัน &nbsp; ' + box(urg === '3') + ' ภายใน 7-10 วัน</div></div>' +
+        '<table class="pr-tbl"><thead><tr><th style="width:9%">ลำดับ</th><th>รายการเสนอซื้อ</th>' +
+        '<th style="width:14%">จำนวน</th><th style="width:12%">หน่วย</th><th style="width:25%">วัตถุประสงค์การใช้</th></tr></thead><tbody>' +
+        trs.join('') + '</tbody></table>' +
+        (note ? '<div class="pr-note">หมายเหตุ : ' + esc(note) + '</div>' : '') +
+        '<div class="pr-end">จึงเรียนมาเพื่อพิจารณาขออนุมัติ</div>' +
+        '<div class="pr-sign">' + signs.map((p) =>
+          '<div><div class="line">....................................</div>' + p[0] + '<br>' + p[1] + '</div>').join('') +
+        '</div></div>';
+    }
+
+    function printSheet() {
+      if (!chosen().length) { toast('เลือกรายการและกรอกจำนวนก่อน', 'error'); return false; }
+      buildSheet();
+      window.print();
+      return true;
     }
 
     async function renderOpen() {
@@ -135,26 +225,43 @@ export async function renderPurchase(content) {
     await loadUsage();
     await refreshAll();
 
-    document.getElementById('pr_save').addEventListener('click', async () => {
-      if (!dbReady) { toast('ยังไม่ได้สร้างตารางใบขอซื้อในฐานข้อมูล', 'error'); return; }
-      const lines = active
-        .filter((it) => picked[it.id] && picked[it.id].on && Number(picked[it.id].qty) > 0)
-        .map((it) => ({ item_id: it.id, qty: Number(picked[it.id].qty) }));
-      if (!lines.length) { toast('เลือกรายการและกรอกจำนวนสั่งซื้อก่อน', 'error'); return; }
-      try {
-        const pr = await api.createPurchaseRequest(document.getElementById('pr_note').value.trim(), lines);
-        lines.forEach((l) => { picked[l.item_id] = { on: false, qty: '' }; });
-        toast('บันทึกใบขอซื้อ #' + pr.id + ' แล้ว');
-        await refreshAll();
-      } catch (err) { toast(err.message, 'error'); }
-    });
-
-    document.getElementById('pr_months').addEventListener('change', async (e) => {
-      months = Number(e.target.value);
-      try { await loadUsage(); render(); } catch (err) { showErr(content)(err); }
-    });
+    document.getElementById('pr_search').addEventListener('input', (e) => { search = e.target.value; render(); });
     document.getElementById('pr_low').addEventListener('change', (e) => { onlyLow = e.target.checked; render(); });
-    document.getElementById('pr_print').addEventListener('click', () => window.print());
+    document.getElementById('pr_fill').addEventListener('click', () => {
+      active.forEach((it) => {
+        if (Number(it.qty_on_hand) <= Number(it.reorder_point) && !Number(qtyOf[it.id])) {
+          const s = suggested(it);
+          if (s) qtyOf[it.id] = String(s);
+        }
+      });
+      render();
+    });
+    document.getElementById('pr_clear').addEventListener('click', () => {
+      Object.keys(qtyOf).forEach((k) => delete qtyOf[k]);
+      render();
+    });
+    document.getElementById('pr_opts_btn').addEventListener('click', () => {
+      const o = document.getElementById('pr_opts');
+      o.style.display = o.style.display === 'none' ? '' : 'none';
+    });
+    document.getElementById('pr_print').addEventListener('click', printSheet);
+    document.getElementById('pr_save_print').addEventListener('click', async () => {
+      const lines = chosen().map((r) => ({ item_id: r.it.id, qty: r.qty }));
+      if (!lines.length) { toast('เลือกรายการและกรอกจำนวนก่อน', 'error'); return; }
+      if (dbReady) {
+        try {
+          const no = document.getElementById('pr_no').value.trim();
+          const note = [no, document.getElementById('pr_note').value.trim()].filter(Boolean).join(' · ');
+          const pr = await api.createPurchaseRequest(note, lines);
+          toast('บันทึกใบขอซื้อ #' + pr.id + ' แล้ว');
+        } catch (err) { toast(err.message, 'error'); return; }
+      } else {
+        toast('ยังไม่ได้สร้างตารางใบขอซื้อ — พิมพ์โดยไม่บันทึก', 'error');
+      }
+      printSheet();
+      Object.keys(qtyOf).forEach((k) => delete qtyOf[k]);
+      await refreshAll();
+    });
   } catch (err) {
     showErr(content)(err);
   }

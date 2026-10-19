@@ -272,3 +272,22 @@ tr.subtotal-row td{background:#f7f9fc;font-weight:700;border-top:2px solid var(-
   .cm-row{grid-template-columns:1fr 1fr;}
   .cm-code{grid-column:1/-1;padding:0;}
 }
+
+/* ---------- ใบขอเสนอซื้อ (พิมพ์ A4 แผ่นเดียว) ---------- */
+.pr-sheet{display:none;}
+.pr-page{width:190mm;height:275mm;margin:0 auto;color:#000;display:flex;flex-direction:column;overflow:hidden;}
+.pr-head{display:flex;align-items:center;gap:12px;margin-bottom:4mm;}
+.pr-head img{height:18mm;}
+.pr-co{font-weight:700;font-size:1.15em;flex:1;}
+.pr-title{font-weight:700;font-size:1.4em;border:1.5px solid #000;padding:2mm 6mm;}
+.pr-meta{display:flex;justify-content:space-between;gap:8mm;margin-bottom:2.5mm;}
+.pr-tbl{width:100%;border-collapse:collapse;margin-top:2mm;}
+.pr-tbl th,.pr-tbl td{border:1px solid #000;padding:0 2mm;line-height:1.2;}
+.pr-tbl th{text-align:center;font-weight:700;padding:1.5mm 2mm;}
+.pr-tbl td.c{text-align:center;}
+.pr-note{margin-top:3mm;}
+.pr-end{margin:5mm 0 0 15mm;}
+.pr-sign{display:grid;grid-template-columns:repeat(4,1fr);gap:4mm;margin-top:auto;padding-top:10mm;text-align:center;}
+.pr-sign .line{margin-bottom:1mm;}
+@page{size:A4 portrait;margin:10mm;}
+@media print{.pr-sheet{display:block !important;}}
