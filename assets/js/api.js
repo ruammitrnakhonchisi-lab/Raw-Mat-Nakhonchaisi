@@ -61,7 +61,7 @@ export const api = {
   getUsedCoils: (itemId, limit) =>
     unwrap(
       supabase.from('stock_out').select('txn_date, usage_type, stock_in!coil_stock_in_id(lot_batch, po_number)')
-        .eq('item_id', itemId).not('coil_stock_in_id', 'is', null)
+        .eq('item_id', itemId).not('coil_stock_in_id', 'is', null).is('voided_at', null)
         .order('txn_date', { ascending: false }).order('created_at', { ascending: false }).limit(limit || 300)
     ),
 
@@ -75,7 +75,7 @@ export const api = {
   recordStockOut: (payload) => unwrap(supabase.rpc('record_stock_out', payload)).then((rows) => rows[0]),
 
   getStockOutInRange: (dateFrom, dateTo) => {
-    let q = supabase.from('stock_out').select('*').order('txn_date');
+    let q = supabase.from('stock_out').select('*').is('voided_at', null).order('txn_date');
     if (dateFrom) q = q.gte('txn_date', dateFrom);
     if (dateTo) q = q.lte('txn_date', dateTo);
     return unwrap(q);
@@ -112,6 +112,10 @@ export const api = {
 
   setPurchaseRequestStatus: (id, status) =>
     unwrap(supabase.from('purchase_requests').update({ status }).eq('id', id)),
+
+  /** ยกเลิกรายการเบิกออก (admin) — คืนของเข้าสต๊อก */
+  voidStockOut: (ledgerId, reason) =>
+    unwrap(supabase.rpc('void_stock_out', { p_ledger_id: ledgerId, p_reason: reason || '' })).then((rows) => rows[0]),
 
   /** แก้ไขรายการรับเข้า/เบิกออก (admin) จากหน้าประวัติการเคลื่อนไหว */
   editLedgerEntry: (payload) =>

@@ -38,6 +38,7 @@ export async function renderDashboard(content) {
         if ((r.txn_date || String(r.created_at).slice(0, 10)) === dStr) {
           if (r.txn_type === 'IN') inSum += Number(r.delta);
           if (r.txn_type === 'OUT') outSum += Math.abs(Number(r.delta));
+          if (r.txn_type === 'VOID_OUT') outSum -= Math.abs(Number(r.delta));
         }
       });
       last7.push({ date: dStr, in: inSum, out: outSum });

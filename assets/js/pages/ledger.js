@@ -2,8 +2,8 @@ import { api } from '../api.js';
 import { esc, fmtNum, val, showErr, toast, openModal, closeModal } from '../ui.js';
 import { STATE as AUTH } from '../auth.js';
 
-const TYPE_LABEL = { IN: 'รับเข้า', OUT: 'เบิกออก', ADJUST: 'ปรับสต๊อค', VOID_IN: 'ยกเลิกรับเข้า' };
-const TYPE_BADGE = { IN: 'badge-success', OUT: 'badge-danger', ADJUST: 'badge-warn', VOID_IN: 'badge-muted' };
+const TYPE_LABEL = { IN: 'รับเข้า', OUT: 'เบิกออก', ADJUST: 'ปรับสต๊อค', VOID_IN: 'ยกเลิกรับเข้า', VOID_OUT: 'ยกเลิกเบิกออก' };
+const TYPE_BADGE = { IN: 'badge-success', OUT: 'badge-danger', ADJUST: 'badge-warn', VOID_IN: 'badge-muted', VOID_OUT: 'badge-muted' };
 
 /** แสดงวันที่ทำรายการจริง (txn_date) แทนวันที่บันทึกเข้าระบบ เพื่อให้รายการย้อนหลัง
  * แสดงวันที่ถูกต้อง — ถ้ายังไม่ได้รัน migration (add_ledger_txn_date.sql) จะ fallback ไปใช้ created_at */
@@ -14,13 +14,18 @@ function txnDateLabel(r) {
 }
 
 /** ผู้ดูแลระบบแก้ไขได้เฉพาะรายการรับเข้า/เบิกออกที่มี ref ต้นทาง */
+/** ref ของรายการเบิกที่ถูกยกเลิกแล้ว (มีแถว VOID_OUT ใน ledger) — อัปเดตทุกครั้งที่โหลดตาราง */
+let voidedRefs = new Set();
+
 function canEdit(r) {
   return AUTH.profile && AUTH.profile.role === 'admin' && (r.txn_type === 'IN' || r.txn_type === 'OUT') &&
-    /^stock_(in|out)#/.test(r.ref || '');
+    /^stock_(in|out)#/.test(r.ref || '') && !(r.txn_type === 'OUT' && voidedRefs.has(r.ref));
 }
 
 function editBtn(r) {
-  return canEdit(r) ? '<button class="btn btn-ghost lg_edit" data-id="' + r.id + '">✏️ แก้ไข</button>' : '';
+  if (!canEdit(r)) return r.txn_type === 'OUT' && voidedRefs.has(r.ref) ? '<span class="badge badge-muted">ถูกยกเลิกแล้ว</span>' : '';
+  return '<button class="btn btn-ghost lg_edit" data-id="' + r.id + '">✏️ แก้ไข</button>' +
+    (r.txn_type === 'OUT' ? ' <button class="btn btn-danger lg_void" data-id="' + r.id + '">ยกเลิกเบิก</button>' : '');
 }
 
 function openEditModal(r, reload) {
@@ -80,7 +85,7 @@ export async function renderLedger(content) {
     '<select id="lg_sku"><option value="">ทุกวัตถุดิบ</option>' + itemOptions + '</select>' +
     '<input type="date" id="lg_from"><input type="date" id="lg_to">' +
     '<select id="lg_type"><option value="">ทุกประเภท</option><option value="IN">รับเข้า</option>' +
-    '<option value="OUT">เบิกออก</option><option value="ADJUST">ปรับสต๊อค</option><option value="VOID_IN">ยกเลิกรับเข้า</option></select>' +
+    '<option value="OUT">เบิกออก</option><option value="ADJUST">ปรับสต๊อค</option><option value="VOID_IN">ยกเลิกรับเข้า</option><option value="VOID_OUT">ยกเลิกเบิกออก</option></select>' +
     '<button class="btn btn-ghost" id="lg_filter">กรอง</button>' +
     '<div class="spacer"></div>' +
     '</div><div id="lg_table"></div>';
@@ -88,6 +93,7 @@ export async function renderLedger(content) {
   async function load() {
     try {
       const rows = await api.getLedger({ sku: val('lg_sku'), dateFrom: val('lg_from'), dateTo: val('lg_to'), type: val('lg_type') });
+      voidedRefs = new Set(rows.filter((r) => r.txn_type === 'VOID_OUT').map((r) => r.ref));
       const tbody = rows.map((r) => {
         const badge = TYPE_BADGE[r.txn_type] || 'badge-muted';
         const label = TYPE_LABEL[r.txn_type] || r.txn_type;
@@ -117,6 +123,21 @@ export async function renderLedger(content) {
         '<div class="table-wrap desktop-only"><table><thead><tr><th>วันที่</th><th>ประเภท</th><th>ชื่อวัตถุดิบ</th>' +
         '<th>จำนวนเปลี่ยนแปลง</th><th>คงเหลือ</th><th>หมายเหตุ</th><th>ผู้บันทึก</th><th></th></tr></thead><tbody>' + tbody + '</tbody></table></div>' +
         '<div class="item-card-list">' + cards + '</div>';
+      document.querySelectorAll('.lg_void').forEach((b) => b.addEventListener('click', async () => {
+        const r = rows.find((x) => String(x.id) === b.dataset.id);
+        const reason = prompt('ยกเลิกรายการเบิก "' + r.item_name + '" จำนวน ' + fmtNum(Math.abs(r.delta)) +
+          ' ?\nของจะถูกคืนเข้าสต๊อก — ใส่เหตุผล (ไม่บังคับ) แล้วกดตกลงเพื่อยืนยัน');
+        if (reason === null) return;
+        b.disabled = true;
+        try {
+          await api.voidStockOut(r.id, reason.trim());
+          toast('ยกเลิกรายการเบิกแล้ว คืนของเข้าสต๊อกเรียบร้อย');
+          load();
+        } catch (err) {
+          b.disabled = false;
+          toast(err.message, 'error');
+        }
+      }));
       document.querySelectorAll('.lg_edit').forEach((b) => b.addEventListener('click', () => {
         openEditModal(rows.find((x) => String(x.id) === b.dataset.id), load);
       }));

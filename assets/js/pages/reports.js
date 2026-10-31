@@ -181,6 +181,7 @@ async function reportMovement(dateFrom, dateTo) {
     const qty = Number(r.delta);
     if (r.txn_type === 'IN') bySku[r.sku]['รับเข้ารวม'] += qty;
     if (r.txn_type === 'OUT') bySku[r.sku]['เบิกออกรวม'] += Math.abs(qty);
+    if (r.txn_type === 'VOID_OUT') bySku[r.sku]['เบิกออกรวม'] -= Math.abs(qty);
     if (r.txn_type === 'ADJUST') bySku[r.sku]['ปรับสต๊อครวม'] += qty;
     bySku[r.sku]['จำนวนรายการ'] += 1;
   });
