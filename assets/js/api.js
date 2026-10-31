@@ -113,6 +113,10 @@ export const api = {
   setPurchaseRequestStatus: (id, status) =>
     unwrap(supabase.from('purchase_requests').update({ status }).eq('id', id)),
 
+  /** แก้ไขรายการรับเข้า/เบิกออก (admin) จากหน้าประวัติการเคลื่อนไหว */
+  editLedgerEntry: (payload) =>
+    unwrap(supabase.rpc('edit_ledger_entry', payload)).then((rows) => rows[0]),
+
   /* ---------- adjustments ---------- */
   recordAdjustment: (payload) => unwrap(supabase.rpc('record_adjustment', payload)).then((rows) => rows[0]),
 
