@@ -304,3 +304,13 @@ tr.subtotal-row td{background:#f7f9fc;font-weight:700;border-top:2px solid var(-
 .pr-sign .dt{font-size:.85em;}
 @page{size:A4 portrait;margin:10mm;}
 @media print{.pr-sheet{display:block !important;}}
+
+/* ---------- Searchable dropdown (combo) ---------- */
+.combo{position:relative;min-width:260px;}
+.combo input[type=text]{width:100%;}
+.combo-list{position:absolute;top:100%;left:0;right:0;margin-top:4px;max-height:300px;overflow-y:auto;
+  background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(20,30,60,.15);z-index:60;}
+.combo-opt{padding:9px 12px;font-size:13px;cursor:pointer;}
+.combo-opt.active,.combo-opt:hover{background:#e8f0fe;color:var(--primary-dark);}
+.combo-empty{padding:9px 12px;font-size:13px;color:var(--muted);}
+@media(max-width:700px){ .combo{width:100%;min-width:0;} }

@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { esc, fmtNum, val, showErr, toast, openModal, closeModal } from '../ui.js';
+import { esc, fmtNum, val, showErr, toast, openModal, closeModal, comboHtml, initCombo } from '../ui.js';
 import { STATE as AUTH } from '../auth.js';
 
 const TYPE_LABEL = { IN: 'รับเข้า', OUT: 'เบิกออก', ADJUST: 'ปรับสต๊อค', VOID_IN: 'ยกเลิกรับเข้า', VOID_OUT: 'ยกเลิกเบิกออก' };
@@ -84,13 +84,13 @@ export async function renderLedger(content) {
   } catch (err) {
     // ไม่ต้องบล็อกทั้งหน้าถ้าโหลดรายชื่อวัตถุดิบไม่สำเร็จ — แค่ตัวกรองวัตถุดิบจะว่างไป
   }
-  const itemOptions = items.map((it) =>
-    '<option value="' + esc(it.sku) + '">' + esc(it.sku) + ' — ' + esc(it.name) + '</option>'
-  ).join('');
+  const itemOptions = [{ value: '', label: 'ทุกวัตถุดิบ' }].concat(
+    items.map((it) => ({ value: it.sku, label: it.sku + ' — ' + it.name }))
+  );
 
   content.innerHTML =
     '<div class="toolbar">' +
-    '<select id="lg_sku"><option value="">ทุกวัตถุดิบ</option>' + itemOptions + '</select>' +
+    comboHtml('lg_sku', '🔍 ทุกวัตถุดิบ (พิมพ์ค้นหาชื่อ / SKU)') +
     '<input type="date" id="lg_from"><input type="date" id="lg_to">' +
     '<select id="lg_type"><option value="">ทุกประเภท</option><option value="IN">รับเข้า</option>' +
     '<option value="OUT">เบิกออก</option><option value="ADJUST">ปรับสต๊อค</option><option value="VOID_IN">ยกเลิกรับเข้า</option><option value="VOID_OUT">ยกเลิกเบิกออก</option></select>' +
@@ -169,5 +169,8 @@ export async function renderLedger(content) {
     }
   }
   document.getElementById('lg_filter').addEventListener('click', load);
+  // เลือกวัตถุดิบ/ประเภท/วันที่แล้วกรองทันที ไม่ต้องกดปุ่ม "กรอง"
+  initCombo('lg_sku', itemOptions, load);
+  ['lg_from', 'lg_to', 'lg_type'].forEach((id) => document.getElementById(id).addEventListener('change', load));
   load();
 }
