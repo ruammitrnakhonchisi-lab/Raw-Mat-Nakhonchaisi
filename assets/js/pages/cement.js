@@ -30,7 +30,7 @@ function avgDailyUse(days, n) {
 }
 
 /* ---------- ไซโล 3D (SVG: ทรงกระบอก + หลังคาโดม + กรวยล่าง + ขา) ---------- */
-function siloSvg(code, pct, tone) {
+function siloSvg(code, label, pct, tone) {
   const p = Math.max(0, Math.min(1, pct));
   const x = 40, w = 120, rx = w / 2, ry = 14;
   const top = 50, bodyH = 190, bot = top + bodyH;     // ตัวถัง
@@ -54,7 +54,7 @@ function siloSvg(code, pct, tone) {
     // ตัวถัง
     '<path d="M' + x + ' ' + top + 'V' + bot + 'A' + rx + ' ' + ry + ' 0 0 0 ' + (x + w) + ' ' + bot + 'V' + top + 'Z" fill="url(#' + id + 'b)"/>' +
     // ปูนข้างใน (มองทะลุตามระดับ)
-    '<g clip-path="url(#' + id + 'k)" opacity=".92"><rect x="' + x + '" y="' + level + '" width="' + w + '" height="' + (bot + ry - level) + '" fill="url(#' + id + 'f)"/>' +
+    '<g clip-path="url(#' + id + 'k)" opacity=".92">' + (p > 0 ? '<rect x="' + x + '" y="' + level + '" width="' + w + '" height="' + (bot + ry - level) + '" fill="url(#' + id + 'f)"/>' : '') +
     (p > 0 ? '<ellipse cx="100" cy="' + level + '" rx="' + rx + '" ry="' + ry + '" fill="' + fill[0] + '"/>' : '') + '</g>' +
     // เส้นสเกล 25/50/75
     [0.25, 0.5, 0.75].map((t) => {
@@ -66,7 +66,7 @@ function siloSvg(code, pct, tone) {
     '<ellipse cx="100" cy="' + top + '" rx="' + rx + '" ry="' + ry + '" fill="#dfe3ec" stroke="#aab1c0"/>' +
     '<path d="M' + x + ' ' + top + 'A' + rx + ' 30 0 0 1 ' + (x + w) + ' ' + top + 'A' + rx + ' ' + ry + ' 0 0 0 ' + x + ' ' + top + 'Z" fill="url(#' + id + 'b)" stroke="#aab1c0"/>' +
     '<rect x="94" y="14" width="12" height="14" fill="#5d6577"/><ellipse cx="100" cy="14" rx="6" ry="2.5" fill="#8a93a5"/>' +
-    '<text x="100" y="' + (top + 100) + '" text-anchor="middle" font-size="26" font-weight="800" fill="#1f2430" style="paint-order:stroke;stroke:#fff;stroke-width:3px">' + esc(code) + '</text>' +
+    '<text x="100" y="' + (top + 100) + '" text-anchor="middle" font-size="26" font-weight="800" fill="#1f2430" style="paint-order:stroke;stroke:#fff;stroke-width:3px">' + esc(label) + '</text>' +
     '</svg>';
 }
 
@@ -85,9 +85,11 @@ function siloCard(c) {
   const last = c.days.filter((d) => d.variance !== null).slice(-1)[0];
   const badge = tone === 'danger' ? '<span class="badge badge-danger">ต่ำกว่าจุดเตือน</span>'
     : tone === 'warn' ? '<span class="badge badge-warn">ใกล้เต็ม</span>' : '<span class="badge badge-success">ปกติ</span>';
-  return '<div class="card silo-card">' + siloSvg(c.silo.code, pct, tone) +
+  const unset = !c.days.length && !Number(c.silo.opening_kg);
+  return '<div class="card silo-card">' + siloSvg(c.silo.code, 'S' + c.silo.seq, pct, tone) +
     '<div class="silo-info"><div class="silo-title">' + esc(c.silo.name || c.silo.code) + ' ' + badge + '</div>' +
     '<div class="silo-qty">' + fmtNum(c.level) + ' <small>กก.</small></div>' +
+    (unset ? '<div class="alert alert-error" style="margin:6px 0">ยังไม่ได้ตั้งยอดตั้งต้น — แอดมินกด ⚙️ ตั้งค่าไซโล</div>' : '') +
     '<div class="muted small">' + Math.round(pct * 100) + '% ของความจุ ' + fmtNum(cap) + ' กก. (≈ ' + fmtNum(c.level / 1000) + ' ตัน)</div>' +
     '<div class="silo-stats">' +
     '<div><span class="lbl">ใช้เฉลี่ย/วัน (14 วัน)</span><span class="val">' + fmtNum(avg) + '</span></div>' +
@@ -104,29 +106,51 @@ function varianceHtml(v) {
   return '<span class="' + cls + '">' + (v > 0 ? '+' : '') + fmtNum(v) + '</span>';
 }
 
-/* ---------- กราฟคงเหลือย้อนหลัง (SVG เส้น) ---------- */
+/* ---------- กราฟคงเหลือย้อนหลัง (รวมต่อแพลนต์: ข้อมูลเก่าระดับแพลนต์ + ไซโลใหม่รวมกัน) ---------- */
+function plantSeries(calcs, plant) {
+  const mine = calcs.filter((c) => c.silo.plant === plant);
+  const dates = Array.from(new Set([].concat(...mine.map((c) => c.days.map((d) => d.date))))).sort();
+  const idx = mine.map(() => 0);
+  const cur = mine.map(() => 0);
+  return dates.map((date) => {
+    mine.forEach((c, i) => {
+      while (idx[i] < c.days.length && c.days[idx[i]].date <= date) { cur[i] = c.days[idx[i]].close; idx[i]++; }
+    });
+    return { date, close: cur.reduce((a, b) => a + b, 0) };
+  });
+}
+
 function trendSvg(calcs) {
   const N = 45;
-  const series = calcs.map((c) => c.days.slice(-N));
+  const plants = Array.from(new Set(calcs.filter((c) => c.silo.active).map((c) => c.silo.plant)));
+  const series = plants.map((p) => plantSeries(calcs, p).slice(-N));
+  const lows = plants.map((p) => calcs.filter((c) => c.silo.plant === p && c.silo.active).reduce((a, c) => a + Number(c.silo.low_kg), 0));
   const W = 640, H = 160, padL = 44, padB = 20, padT = 8;
-  const maxV = Math.max(1, ...calcs.map((c) => Number(c.silo.capacity_kg)));
+  const maxV = Math.max(1, ...plants.map((p) => calcs.filter((c) => c.silo.plant === p && c.silo.active).reduce((a, c) => a + Number(c.silo.capacity_kg), 0)));
   const colors = ['#1a73e8', '#e8750a'];
   const len = Math.max(...series.map((s) => s.length), 1);
   const X = (i) => padL + (len <= 1 ? 0 : (i / (len - 1)) * (W - padL - 10));
   const Y = (v) => padT + (1 - v / maxV) * (H - padT - padB);
   let g = [0, 0.5, 1].map((t) => '<line x1="' + padL + '" x2="' + (W - 10) + '" y1="' + Y(maxV * t) + '" y2="' + Y(maxV * t) + '" stroke="#e3e7ee"/>' +
     '<text x="' + (padL - 4) + '" y="' + (Y(maxV * t) + 3) + '" text-anchor="end" font-size="10" fill="#6b7385">' + fmtNum(maxV * t / 1000) + 't</text>').join('');
-  calcs.forEach((c, k) => {
-    const s = series[k];
-    if (!s.length) return;
-    g += '<polyline fill="none" stroke="' + colors[k % 2] + '" stroke-width="2" points="' + s.map((d, i) => X(i + (len - s.length)).toFixed(1) + ',' + Y(d.close).toFixed(1)).join(' ') + '"/>';
-    g += '<line x1="' + padL + '" x2="' + (W - 10) + '" y1="' + Y(c.silo.low_kg) + '" y2="' + Y(c.silo.low_kg) + '" stroke="' + colors[k % 2] + '" stroke-dasharray="4 4" opacity=".4"/>';
+  plants.forEach((p, k) => {
+    const sr = series[k];
+    if (!sr.length) return;
+    g += '<polyline fill="none" stroke="' + colors[k % 2] + '" stroke-width="2" points="' + sr.map((d, i) => X(i + (len - sr.length)).toFixed(1) + ',' + Y(d.close).toFixed(1)).join(' ') + '"/>';
+    g += '<line x1="' + padL + '" x2="' + (W - 10) + '" y1="' + Y(lows[k]) + '" y2="' + Y(lows[k]) + '" stroke="' + colors[k % 2] + '" stroke-dasharray="4 4" opacity=".4"/>';
   });
   const first = series.find((s) => s.length);
   if (first) g += '<text x="' + padL + '" y="' + (H - 4) + '" font-size="10" fill="#6b7385">' + esc(first[0].date) + '</text>' +
     '<text x="' + (W - 10) + '" y="' + (H - 4) + '" text-anchor="end" font-size="10" fill="#6b7385">' + esc(first[first.length - 1].date) + '</text>';
-  const legend = calcs.map((c, k) => '<span><i style="background:' + colors[k % 2] + '"></i>' + esc(c.silo.code) + '</span>').join('');
-  return '<div class="legend">' + legend + '<span class="muted">เส้นประ = จุดเตือนต่ำ</span></div><svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto">' + g + '</svg>';
+  const legend = plants.map((p, k) => '<span><i style="background:' + colors[k % 2] + '"></i>แพลนต์ ' + esc(p) + ' (รวม 2 ไซโล)</span>').join('');
+  return '<div class="legend">' + legend + '<span class="muted">เส้นประ = จุดเตือนต่ำรวม</span></div><svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto">' + g + '</svg>';
+}
+
+function plantSection(list, plant) {
+  const total = list.reduce((a, c) => a + c.level, 0);
+  const cap = list.reduce((a, c) => a + Number(c.silo.capacity_kg), 0) || 1;
+  return '<div class="section-title" style="margin-top:8px"><h3>🏭 แพลนต์ ' + esc(plant) + ' — รวม ' + fmtNum(total) + ' กก. (' + Math.round(total / cap * 100) + '% ของ ' + fmtNum(cap / 1000) + ' ตัน)</h3></div>' +
+    '<div class="silo-grid">' + list.map(siloCard).join('') + '</div>';
 }
 
 /* ---------- หน้า ---------- */
@@ -139,12 +163,14 @@ export async function renderCement(content) {
     }
     const isAdmin = AUTH.profile.role === 'admin';
     const calcs = silos.map((s) => computeSilo(s, daily));
+    const act = calcs.filter((c) => c.silo.active);
+    const plants = Array.from(new Set(act.map((c) => c.silo.plant)));
     const months = Array.from(new Set(daily.map((r) => r.txn_date.slice(0, 7)))).sort().reverse();
     let month = months[0] || todayISO().slice(0, 7);
 
     content.innerHTML =
-      '<div class="silo-grid">' + calcs.map(siloCard).join('') + '</div>' +
-      '<div class="card" style="margin-top:16px"><div class="section-title"><h3>📈 ระดับปูนย้อนหลัง 45 วัน</h3></div>' + trendSvg(calcs) + '</div>' +
+      plants.map((p) => plantSection(act.filter((c) => c.silo.plant === p), p)).join('') +
+      '<div class="card" style="margin-top:16px"><div class="section-title"><h3>📈 ระดับปูนรวมแต่ละแพลนต์ ย้อนหลัง 45 วัน</h3></div>' + trendSvg(calcs) + '</div>' +
       '<div class="card" style="margin-top:16px"><div class="section-title"><h3>✍️ บันทึกประจำวัน</h3></div><div id="cmForm"></div></div>' +
       '<div class="section-title" style="margin-top:20px"><h3>📅 ตารางประจำเดือน</h3>' +
       '<div class="toolbar"><select id="cmMonth">' + (months.length ? months : [month]).map((m) => '<option value="' + m + '">' + m + '</option>').join('') + '</select>' +
@@ -152,12 +178,12 @@ export async function renderCement(content) {
       (isAdmin ? '<button class="btn btn-ghost" id="cmSettings">⚙️ ตั้งค่าไซโล</button>' : '') + '</div></div>' +
       '<div id="cmTable"></div>';
 
-    renderForm(calcs, daily);
+    renderForm(act, daily);
     const draw = () => { document.getElementById('cmTable').innerHTML = monthTable(calcs, month); };
     draw();
     document.getElementById('cmMonth').addEventListener('change', (e) => { month = e.target.value; draw(); });
     document.getElementById('cmCsv').addEventListener('click', () => downloadCsv(monthCsv(calcs, month), 'cement-' + month + '.csv'));
-    if (isAdmin) document.getElementById('cmSettings').addEventListener('click', () => settingsModal(silos, () => renderCement(content)));
+    if (isAdmin) document.getElementById('cmSettings').addEventListener('click', () => settingsModal(silos.filter((x) => x.active), () => renderCement(content)));
   } catch (err) {
     showErr(content)(err);
   }
@@ -169,7 +195,7 @@ function renderForm(calcs, daily) {
   daily.forEach((r) => { byKey[r.txn_date + '|' + r.silo_code] = r; });
   const rowHtml = (c) => {
     const k = c.silo.code;
-    return '<div class="cm-row"><div class="cm-code">' + esc(k) + '</div>' +
+    return '<div class="cm-row"><div class="cm-code">' + esc(c.silo.name || k) + '</div>' +
       '<div class="form-field"><label>รับเข้า (กก.)</label><input type="number" min="0" step="1" id="cm_rec_' + k + '"></div>' +
       '<div class="form-field"><label>ใช้ไป (กก.)</label><input type="number" min="0" step="1" id="cm_use_' + k + '"></div>' +
       '<div class="form-field"><label>นับจริง (กก.) <span class="muted">ถ้ามี</span></label><input type="number" min="0" step="1" id="cm_cnt_' + k + '"></div>' +
@@ -218,7 +244,12 @@ function renderForm(calcs, daily) {
   });
 }
 
+function monthCols(calcs, month) {
+  return calcs.filter((c) => c.days.some((d) => d.date.slice(0, 7) === month) || (c.silo.active && c.silo.opening_date.slice(0, 7) <= month));
+}
+
 function monthRows(calcs, month) {
+  calcs = monthCols(calcs, month);
   const dates = new Set();
   calcs.forEach((c) => c.days.forEach((d) => { if (d.date.slice(0, 7) === month) dates.add(d.date); }));
   return Array.from(dates).sort().map((date) => ({
@@ -226,10 +257,11 @@ function monthRows(calcs, month) {
   }));
 }
 
-function monthTable(calcs, month) {
-  const rows = monthRows(calcs, month);
+function monthTable(all, month) {
+  const calcs = monthCols(all, month);
+  const rows = monthRows(all, month);
   if (!rows.length) return '<div class="empty-state">ไม่มีข้อมูลเดือนนี้</div>';
-  const head = '<tr><th rowspan="2">วันที่</th>' + calcs.map((c) => '<th colspan="5" style="text-align:center">' + esc(c.silo.code) + '</th>').join('') + '</tr><tr>' +
+  const head = '<tr><th rowspan="2">วันที่</th>' + calcs.map((c) => '<th colspan="5" style="text-align:center">' + esc(c.silo.plant === c.silo.code ? c.silo.code + ' รวม' : c.silo.plant + ' S' + c.silo.seq) + '</th>').join('') + '</tr><tr>' +
     calcs.map(() => '<th>รับ</th><th>ใช้</th><th>คงเหลือ</th><th>นับจริง</th><th>ขาด/เกิน</th>').join('') + '</tr>';
   const sum = calcs.map(() => ({ rec: 0, used: 0, var: 0 }));
   const body = rows.map((r) => '<tr><td>' + esc(r.date) + '</td>' + r.by.map((d, i) => {
@@ -242,8 +274,9 @@ function monthTable(calcs, month) {
   return '<div class="table-wrap"><table class="cm-table"><thead>' + head + '</thead><tbody>' + body + '</tbody><tfoot>' + foot + '</tfoot></table></div>';
 }
 
-function monthCsv(calcs, month) {
-  return monthRows(calcs, month).map((r) => {
+function monthCsv(all, month) {
+  const calcs = monthCols(all, month);
+  return monthRows(all, month).map((r) => {
     const o = { วันที่: r.date };
     calcs.forEach((c, i) => {
       const d = r.by[i], k = c.silo.code;
